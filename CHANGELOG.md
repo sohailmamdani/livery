@@ -1,0 +1,87 @@
+# Changelog
+
+All notable changes to Livery. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver-ish (breaking changes to CLI surface or config shape bump the minor version during 0.x).
+
+## Unreleased
+
+## 0.6.2 — 2026-04-30
+
+### Added
+- `livery --version` (alias `-v`) — prints the installed package version. Resolves from `importlib.metadata` for installed builds, falling back to `pyproject.toml` when running from the dev tree.
+
+### Changed
+- `livery upgrade-workspace` now prints the running Livery version at the top of its output and clarifies the "nothing to do" case: it spells out that the workspace scaffolding is current with the running Livery version, and points users at `uv tool upgrade livery` for catching up the binary itself. The two commands have always done different things; the names made that ambiguous, so the wording now says it explicitly.
+
+## 0.6.1 — 2026-04-30
+
+### Changed
+- README, `docs/first-setup.md`, `CONTRIBUTING.md`, and `bin/livery` install instructions updated to reflect the public repo. Install URL switched from `git+ssh://` to `git+https://`; the SSH-access prerequisite and "pre-1.0 private repo" framing are gone. Pinned-version install variant added. Documentation-only release.
+
+## 0.6.0 — 2026-04-29
+
+### Added
+- `livery status` — at-a-glance dashboard for the workspace. Groups open tickets by assignee with oldest-age signal, surfaces stale tickets (open ≥ 7 days, configurable via `--stale-days`), surfaces blocked tickets (either `status: blocked` or `blocked_on: <reason>` in frontmatter), shows the most recent ticket closes, and reports runtime health. Companion to `livery ticket list` — that's the raw scriptable cut, this is the human rollup. ANSI-colored on TTY, plain when piped.
+- `blocked_on` frontmatter field convention. Optional; tickets with `blocked_on: "<reason>"` are surfaced separately from stale tickets in `livery status`. Either `status: blocked` or `blocked_on: ...` works — both routes are equivalent.
+
+## 0.5.0 — 2026-04-25
+
+### Added
+- **CoS engine registry** at `livery/cos_engines.py` — adding a new engine is now a ~10-line entry. Ships with `claude_code`, `codex`, `pi` ([pi-mono](https://github.com/badlogic/pi-mono)), and `opencode` ([opencode.ai](https://opencode.ai/)) supported out of the box.
+- `livery upgrade-workspace` — refresh framework-managed scaffolding without touching user content. Dry-run by default; `--apply` writes; `--force` overrides customization warnings. Compares the workspace against what `livery init` would produce today and creates missing files / refreshes stale framework blocks. Hard guardrail: never touches `livery.toml`, `agents/`, `tickets/`, or anything outside the LIVERY-MANAGED markers in convention files.
+- `--cos-engine` now accepts a comma-separated list of engines (`pi,opencode`) in addition to the historical single value or `both` alias.
+- `cos_engines = [...]` field in `livery.toml`, written at init time, used by `upgrade-workspace` to know which engines to manage. Legacy workspaces without this field fall back to detection from existing files.
+
+### Changed
+- CoS convention files (`CLAUDE.md`, `AGENTS.md`, ...) now have a framework-managed block fenced by `<!-- LIVERY-MANAGED:BEGIN -->` ... `<!-- LIVERY-MANAGED:END -->` markers at the top, with user-editable content below. This is what makes `livery upgrade-workspace` safe — the framework owns the marked block, the user owns everything outside it. Existing workspaces (no markers) get a managed block prepended on first `upgrade-workspace` run; user content is preserved verbatim below.
+- Onboarding's CoS-engine prompt now lists every registered engine.
+
+## 0.4.1 — 2026-04-25
+
+### Fixed
+- `livery init --cos-engine codex` no longer scaffolds the Claude-Code-specific `.claude/` directory — Codex users now get a clean workspace without dead Claude-only files. Codex's own skill format is supported instead: `livery init` writes `.agents/skills/new-ticket/SKILL.md` (Codex's convention) when the engine choice includes Codex. `--cos-engine both` produces both `.claude/skills/` and `.agents/skills/` with identical SKILL.md content.
+
+## 0.4.0 — 2026-04-24
+
+### Added
+- `livery init --cos-engine <claude_code|codex|both>` — pick which CoS convention file(s) to scaffold. `claude_code` writes only `CLAUDE.md`, `codex` writes only `AGENTS.md`, `both` (default) writes both with identical content. Codex users can now use Livery as their orchestration layer without a stray `CLAUDE.md` in their workspace.
+- `livery onboard` prompts for the CoS engine when creating a new workspace.
+
+### Changed
+- Scaffolded CoS templates are now engine-neutral — wording refers to "your Claude Code or Codex session" instead of assuming Claude Code. Existing workspaces are unaffected; this applies only to freshly-scaffolded files.
+- Post-init "Next:" messaging and `livery onboard`'s "Next steps" output adapt to which CoS file(s) got scaffolded.
+
+## 0.3.0 — 2026-04-23
+
+### Added
+- `livery onboard` — stateful guided setup. Checks your runtimes, offers to create a workspace if you're not in one, offers to hire a first agent if none exist, then points at next steps (open Claude Code, flesh out `AGENTS.md`, file your first ticket). Idempotent — safe to re-run at any point; skips steps you've already completed.
+- `livery dispatch fan-out <ticket> --to a,b,c` — dispatch one ticket to multiple agents in parallel. Each gets its own worktree, prompt file, and output file. Prints N shell commands by default; `--run` launches them in parallel and waits for completion.
+
+### Changed
+- Dispatch prompt and output filenames now include the assignee (`livery-dispatch-<ticket>-<agent>.{txt,out}`). This makes fan-out-safe by default and makes it unambiguous which file belongs to which agent; single-agent dispatches get a slightly longer filename but nothing breaks.
+- Worktree names now include the assignee when one is set (`<repo>-<agent>-t<suffix>`), so fan-out into a shared `cwd:` doesn't collide.
+
+## 0.2.0 — 2026-04-21
+
+### Added
+- `livery hire <id>` — interactive wizard (or flag-driven) to scaffold a new agent. Writes `agents/<id>/agent.md` with structured frontmatter plus an `AGENTS.md` stub with section headers the user fleshes out with their CoS.
+- `livery doctor` — reports which runtimes are reachable (codex / claude / cursor-agent / ollama on PATH; LM Studio at :1234; Ollama at :11434). Inside a workspace, also validates each hired agent's `cwd` and runtime. Supports `--json`.
+- Interactive `livery init` — prompts for workspace name, description, default runtime, and Telegram config when stdin is a TTY. `--no-interactive` preserves the old flag-driven behavior for scripting.
+- `LICENSE` (MIT).
+- `docs/runtimes.md`, `docs/config.md`, `docs/patterns.md`, `docs/first-setup.md` — reference documentation and a step-by-step first-time setup walkthrough. `patterns.md` now opens with the foundational "one workspace per company, not per project" pattern.
+- `CONTRIBUTING.md`.
+
+### Changed
+- README audited for public-repo release. Install section now clearly documents the pre-1.0 private-repo gate.
+
+## 0.1.0 — 2026-04-20
+
+First distributable release.
+
+### Added
+- `livery.toml` as the workspace marker.
+- `livery init` to scaffold a fresh workspace (`livery.toml`, `CLAUDE.md`, `agents/`, `tickets/`, `.claude/commands/ticket.md`, `.claude/skills/new-ticket/SKILL.md`).
+- `bin/livery` dev wrapper that preserves the user's cwd when invoked through the in-repo `.venv`.
+- Install flow via `uv tool install --from git+ssh://...` verified end-to-end.
+
+### Changed
+- Extracted the framework from the self-hosted workspace layout. The maintainer's personal workspace content moved to a separate directory; this repo now contains only Python code, tests, and documentation.

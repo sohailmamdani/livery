@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Dev wrapper: runs the `livery` CLI from a source checkout without requiring
+# a global install. Invokes the framework's venv python directly so the
+# user's cwd is preserved (important for commands like `livery init` that
+# operate on the current directory).
+#
+# Prereq: `uv sync` has been run once in the framework repo to create .venv.
+#
+# For distribution, users install with:
+#     uv tool install --from git+https://github.com/sohailmamdani/livery.git livery
+#
+# That puts a `livery` binary on PATH that operates on the user's cwd directly.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VENV_PYTHON="$ROOT/.venv/bin/python"
+if [ ! -x "$VENV_PYTHON" ]; then
+    echo "livery: venv not found at $VENV_PYTHON. Run \`uv sync\` in $ROOT first." >&2
+    exit 1
+fi
+exec "$VENV_PYTHON" -m livery "$@"

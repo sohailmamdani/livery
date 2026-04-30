@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+*.egg-info/
+dist/
+build/
+
+# per-agent runtime state (session ids, etc.)
+agents/*/state.json
+
+# local workspace overrides
+.livery-local/
+.playwright-mcp/
+airtable-create-field-snapshot.md
+
+# Maintainer scratchpads — not for the public repo
+HANDOFF.md
