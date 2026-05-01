@@ -4,6 +4,14 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.6.4 — 2026-05-01
+
+### Added
+- `livery ticket close --status <terminal-status>` — pick a non-default terminal status when closing a ticket. Accepts `done` (default), `closed`, `cancelled`, `abandoned`, `wontfix`. Reuses the regular close pipeline (writes the file, git commits, pushes, pings Telegram), but the commit subject and Telegram ping use a verb that matches the chosen status (`Cancel ticket X` rather than `Close ticket X`). Closes the gap from v0.6.3, where `cancelled` was a recognized terminal status with no CLI to set it.
+
+### Changed
+- "Already closed" check now rejects re-closing on *any* terminal status, not just `done`. Trying to close a ticket that's already `cancelled` errors out cleanly instead of double-flipping.
+
 ## 0.6.3 — 2026-05-01
 
 ### Fixed

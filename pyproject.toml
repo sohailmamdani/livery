@@ -1,6 +1,6 @@
 [project]
 name = "livery"
-version = "0.6.3"
+version = "0.6.4"
 description = "Local AI company orchestration — markdown + git, no database"
 requires-python = ">=3.11"
 dependencies = [

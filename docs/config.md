@@ -114,9 +114,9 @@ blocked_on: "waiting on Airtable schema PR"  # optional — see below
 - **`status`** — one of:
   - **`open`** (default) — in the active queue, not yet resolved.
   - **`blocked`** — open but waiting on something. Surfaced in its own section by `livery status`.
-  - **`done`** — completed. Set automatically by `livery ticket close`.
-  - **`closed`** — synonym for `done` if you prefer that word.
-  - **`cancelled`** / **`abandoned`** / **`wontfix`** — terminal. Decided not to do.
+  - **`done`** — completed. Set automatically by `livery ticket close` (default).
+  - **`closed`** — synonym for `done` if you prefer that word. `livery ticket close --status closed`.
+  - **`cancelled`** / **`abandoned`** / **`wontfix`** — terminal. Decided not to do. Set via `livery ticket close --status <one of these>`. Same pipeline as a regular close (writes the file, commits, pushes, pings Telegram), with a verb in the commit message and Telegram ping that matches the actual terminal status (`Cancel ticket X` rather than `Close ticket X`).
 
   The terminal set (everything that takes a ticket out of the open queue) is `done`, `closed`, `cancelled`, `abandoned`, `wontfix`. `livery status` excludes all of these from the open queue and includes them in the "recently closed" roll-up. Anything outside this set is treated as still-open — including `blocked` (which is open-but-paused, not terminal).
 

@@ -83,6 +83,9 @@ livery dispatch prep <ticket-id>
 
 # Close a ticket (commits, pushes, pings Telegram if configured)
 livery ticket close <ticket-id> --summary "Shipped v1 copy."
+
+# Cancel a ticket you decided not to do (same pipeline as close)
+livery ticket close <ticket-id> --status cancelled --summary "Folded into the new schema."
 ```
 
 ## Workspace layout

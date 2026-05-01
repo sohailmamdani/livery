@@ -182,20 +182,42 @@ def ticket_show(query: str) -> None:
 def ticket_close(
     query: str = typer.Argument(..., help="Ticket id or slug fragment"),
     summary: Optional[str] = typer.Option(None, "--summary", "-s", help="Closing summary to append to Thread"),
+    status: str = typer.Option(
+        "done", "--status",
+        help="Terminal status to set. One of done, closed, cancelled, abandoned, wontfix.",
+    ),
     telegram: bool = typer.Option(True, "--telegram/--no-telegram", help="Send Telegram notification on close"),
     push: bool = typer.Option(True, "--push/--no-push", help="git push after commit"),
 ) -> None:
-    """Close a ticket: flip status→done, append optional CoS summary, git commit, ping Telegram."""
+    """Close a ticket: flip status→<terminal>, append optional CoS summary, git commit, ping Telegram.
+
+    Default `--status done` is the regular happy-path close. For tickets you
+    decided not to do, pass `--status cancelled` (or abandoned/wontfix). All
+    of those are recognized as terminal by `livery status` and excluded from
+    the open queue.
+    """
+    from .status import TERMINAL_STATUSES
+
+    if status not in TERMINAL_STATUSES:
+        typer.echo(
+            f"--status must be one of {sorted(TERMINAL_STATUSES)}; got {status!r}",
+            err=True,
+        )
+        raise typer.Exit(1)
+
     root = find_root()
     path = _find_ticket(root, query)
     post = frontmatter.load(path)
     now = _now_iso()
 
-    if post.get("status") == "done":
-        typer.echo(f"{post.get('id', path.stem)} is already done (no-op)", err=True)
+    if post.get("status") in TERMINAL_STATUSES:
+        typer.echo(
+            f"{post.get('id', path.stem)} is already {post.get('status')!r} (no-op)",
+            err=True,
+        )
         raise typer.Exit(1)
 
-    post["status"] = "done"
+    post["status"] = status
     post["updated"] = now
 
     if summary:
@@ -208,9 +230,21 @@ def ticket_close(
     ticket_id = str(post.get("id", path.stem))
     title = str(post.get("title", ""))
 
+    # Verb in commit + Telegram messages reflects the actual terminal status,
+    # so log readers can tell "Cancel ticket X" from "Close ticket X" at a glance.
+    # `verb` is imperative (commit subject); `past` is past-participle (Telegram + echo).
+    verb_by_status = {
+        "done": ("Close", "done"),
+        "closed": ("Close", "closed"),
+        "cancelled": ("Cancel", "cancelled"),
+        "abandoned": ("Abandon", "abandoned"),
+        "wontfix": ("Wontfix", "wontfix"),
+    }
+    verb, past = verb_by_status.get(status, (status.capitalize(), status))
+
     subprocess.run(["git", "-C", str(root), "add", rel], check=True)
     subprocess.run(
-        ["git", "-C", str(root), "commit", "-m", f"Close ticket {ticket_id}: {title}"],
+        ["git", "-C", str(root), "commit", "-m", f"{verb} ticket {ticket_id}: {title}"],
         check=True,
     )
 
@@ -224,7 +258,7 @@ def ticket_close(
             typer.echo(f"push failed (non-fatal): {push_result.stderr.strip()}", err=True)
 
     if telegram:
-        text_lines = [f"{ticket_id} done: {title}"]
+        text_lines = [f"{ticket_id} {past}: {title}"]
         if summary:
             text_lines.append("")
             text_lines.append(summary)
@@ -233,7 +267,7 @@ def ticket_close(
         except Exception as e:
             typer.echo(f"Telegram send failed (non-fatal): {e}", err=True)
 
-    typer.echo(f"Closed: {rel}")
+    typer.echo(f"{past.capitalize()}: {rel}")
 
 
 @dispatch_app.command("prep")
