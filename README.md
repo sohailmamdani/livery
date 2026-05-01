@@ -166,6 +166,16 @@ livery dispatch fan-out <ticket-id> --to research,research-codex --run
 
 Each agent gets its own git worktree, prompt file, and output file. Drop `--run` to print the N shell commands for you to run yourself.
 
+To check on dispatches you've launched:
+
+```sh
+livery dispatch status                    # rollup of every dispatch artifact in /tmp
+livery dispatch tail <query>              # one-shot: print last 20 lines
+livery dispatch tail <query> -f           # follow (tail -f)
+```
+
+`status` flags each dispatch as **done** (its output contains a `=== DISPATCH_SUMMARY ===` block), **active** (recent file activity, no summary yet), or **stale** (file hasn't moved in 5+ minutes and never produced a summary — usually means the agent crashed or stuck).
+
 ## Status
 
 Get an at-a-glance dashboard of the workspace — open tickets grouped by assignee, stale ones flagged, blocked ones highlighted, recent closes, runtime health:

@@ -4,6 +4,13 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.7.0 — 2026-05-01
+
+### Added
+- `livery dispatch status` — rollup of every dispatch artifact in `--output-dir` (default `/tmp`). Classifies each dispatch as **done** (output contains a `=== DISPATCH_SUMMARY ===` block), **active** (recent file activity, no summary yet), or **stale** (file hasn't moved in 5+ minutes and never produced a summary — likely crashed or stuck). Shows summary excerpt for done dispatches, last line for in-flight ones. ANSI-colored on TTY.
+- `livery dispatch tail <query>` — one-shot or follow (`-f`) tail of a specific dispatch's output file. Resolves the dispatch via substring match against the `<ticket-id>-<assignee>` filename label; errors cleanly on no match or ambiguous match.
+- `livery/dispatch_view.py` — pure-data scanner for dispatch artifacts, exposes `list_dispatches()` and `find_dispatch()` for downstream code.
+
 ## 0.6.4 — 2026-05-01
 
 ### Added

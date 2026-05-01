@@ -10,6 +10,12 @@ import frontmatter
 import typer
 
 from .dispatch import prepare_dispatch, prepare_fan_out
+from .dispatch_view import (
+    DispatchState,
+    find_dispatch,
+    humanize_age,
+    list_dispatches,
+)
 from .doctor import run_doctor
 from .hire import SUGGESTED_MODELS, SUPPORTED_RUNTIMES, hire_agent
 from .init import SUPPORTED_COS_ENGINES, init_workspace
@@ -403,6 +409,107 @@ def dispatch_fan_out(
     if any_failed:
         typer.echo("\nOne or more dispatches exited non-zero. See output files above.", err=True)
         raise typer.Exit(1)
+
+
+@dispatch_app.command("status")
+def dispatch_status(
+    output_dir: Path = typer.Option(
+        Path("/tmp"), "--output-dir",
+        help="Where dispatch artifacts live (must match what `dispatch prep` wrote).",
+    ),
+    since_minutes: Optional[int] = typer.Option(
+        None, "--since-minutes",
+        help="Only show dispatches whose output file was written in the last N minutes.",
+    ),
+) -> None:
+    """Roll-up of every dispatch artifact in <output_dir>.
+
+    Shows whether each dispatch finished (its output contains a
+    `=== DISPATCH_SUMMARY ===` block), is still active (recent file
+    activity, no summary yet), or went stale (file hasn't moved in a
+    while and never produced a summary — usually a crash).
+    """
+    import sys
+
+    views = list_dispatches(output_dir)
+    if since_minutes is not None:
+        cutoff = since_minutes * 60
+        views = [v for v in views if v.age_seconds <= cutoff]
+
+    if not views:
+        typer.echo(f"No dispatch artifacts in {output_dir}.")
+        return
+
+    use_color = sys.stdout.isatty()
+
+    def c(text: str, code: str) -> str:
+        return f"\033[{code}m{text}\033[0m" if use_color else text
+
+    GREEN, YELLOW, RED, DIM, BOLD = "32", "33", "31", "2", "1"
+    icon_for = {
+        DispatchState.DONE: (c("✓", GREEN), GREEN),
+        DispatchState.ACTIVE: (c("●", YELLOW), YELLOW),
+        DispatchState.STALE: (c("✗", RED), RED),
+    }
+
+    typer.echo(c(f"Dispatch artifacts in {output_dir}:", BOLD))
+    typer.echo()
+
+    for v in views:
+        icon, color = icon_for[v.state]
+        age = humanize_age(v.age_seconds)
+        typer.echo(f"  {icon} {v.label}  {c(f'[{v.state.value}, {age} ago]', color)}")
+        if v.state == DispatchState.DONE and v.summary_excerpt:
+            for line in v.summary_excerpt[:3]:
+                typer.echo(c(f"      {line}", DIM))
+        elif v.last_line:
+            shown = v.last_line[:120] + ("…" if len(v.last_line) > 120 else "")
+            typer.echo(c(f"      last: {shown}", DIM))
+
+    typer.echo()
+    typer.echo(c("(`livery dispatch tail <query>` to follow one)", DIM))
+
+
+@dispatch_app.command("tail")
+def dispatch_tail(
+    query: str = typer.Argument(
+        ...,
+        help="Substring matching the dispatch — ticket id, assignee, or both. Must match exactly one.",
+    ),
+    output_dir: Path = typer.Option(Path("/tmp"), "--output-dir"),
+    follow: bool = typer.Option(
+        False, "-f", "--follow",
+        help="Tail -f the file (blocks until Ctrl+C). Default is one-shot.",
+    ),
+    lines: int = typer.Option(
+        20, "-n", "--lines",
+        help="How many trailing lines to print on a one-shot tail.",
+    ),
+) -> None:
+    """Print (or follow) the output of a specific dispatch.
+
+    Resolves the dispatch via substring match against the filename's
+    `<ticket-id>-<assignee>` label. Errors if zero or multiple match.
+    """
+    import subprocess
+
+    try:
+        view = find_dispatch(query, output_dir)
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"# {view.path}\n", err=True)
+    if follow:
+        # Hand off to `tail -f`: portable enough on macOS / Linux, simpler
+        # than reimplementing inotify, and Ctrl+C signaling works as expected.
+        subprocess.run(["tail", "-n", str(lines), "-f", str(view.path)])
+    else:
+        result = subprocess.run(
+            ["tail", "-n", str(lines), str(view.path)],
+            capture_output=True, text=True,
+        )
+        typer.echo(result.stdout, nl=False)
 
 
 @app.command("init")
