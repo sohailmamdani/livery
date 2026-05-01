@@ -111,8 +111,22 @@ blocked_on: "waiting on Airtable schema PR"  # optional — see below
 
 ### Fields
 
-- **`status`** — `open` (default), `done` (set automatically by `livery ticket close`), or `blocked`. Blocked tickets are surfaced in their own section in `livery status`.
+- **`status`** — one of:
+  - **`open`** (default) — in the active queue, not yet resolved.
+  - **`blocked`** — open but waiting on something. Surfaced in its own section by `livery status`.
+  - **`done`** — completed. Set automatically by `livery ticket close`.
+  - **`closed`** — synonym for `done` if you prefer that word.
+  - **`cancelled`** / **`abandoned`** / **`wontfix`** — terminal. Decided not to do.
+
+  The terminal set (everything that takes a ticket out of the open queue) is `done`, `closed`, `cancelled`, `abandoned`, `wontfix`. `livery status` excludes all of these from the open queue and includes them in the "recently closed" roll-up. Anything outside this set is treated as still-open — including `blocked` (which is open-but-paused, not terminal).
+
+  If you need a custom terminal status, add it to `TERMINAL_STATUSES` in `livery/status.py` and document the addition here. Silent fall-through to "open" was the prior behavior and turned out to mask cancelled tickets, so we made the set explicit.
+
 - **`blocked_on`** (optional) — a free-form string describing what the ticket is waiting on. An alternative to `status: blocked` for cases where the ticket is technically still open but parked. `livery status` treats either signal as "blocked" and renders accordingly. Use whichever fits your style.
+
+### Staleness
+
+`livery status` flags any open ticket that's been around for ≥ `--stale-days` (default 7) as stale. **Age is computed from `created`, not `updated`** — so a spec rewrite or a thread comment doesn't reset the staleness clock. The reasoning: "this work has been outstanding for N days" is a more useful signal than "the file changed N days ago," especially for tickets you re-scope mid-flight. If you want a different convention, override the threshold per-run with `--stale-days N` or change the `stale_days` parameter in `compute_status()`.
 
 ## `agents/<id>/AGENTS.md`
 

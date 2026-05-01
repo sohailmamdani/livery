@@ -6,7 +6,7 @@ from pathlib import Path
 import frontmatter
 import pytest
 
-from livery.status import compute_status, _parse_iso
+from livery.status import TERMINAL_STATUSES, compute_status, _parse_iso
 
 
 @pytest.fixture(autouse=True)
@@ -171,6 +171,47 @@ def test_runtimes_count(tmp_path):
     # fake_runtimes_ok fixture makes everything reachable; doctor returns 5 runtimes
     assert report.runtimes_total == 5
     assert report.runtimes_ok == 5
+
+
+def test_cancelled_tickets_not_in_open_bucket(tmp_path):
+    """Regression: status='cancelled' was being treated as open. Should be terminal."""
+    root = _make_workspace(tmp_path)
+    _write_ticket(root, ticket_id="cancelled-ticket", title="t", assignee="x", status="cancelled", days_old=2)
+    _write_ticket(root, ticket_id="open-ticket", title="t", assignee="x", status="open", days_old=2)
+
+    report = compute_status(root)
+    # Only the open ticket counts toward the active queue
+    assert report.open_by_assignee == {"x": 1}
+    # And the cancelled ticket is not flagged as stale (it's not open)
+    assert "cancelled-ticket" not in [t.id for t in report.stale_tickets]
+
+
+def test_cancelled_tickets_appear_in_recently_closed(tmp_path):
+    """Cancelled tickets should still surface in the recently-resolved roll-up."""
+    root = _make_workspace(tmp_path)
+    _write_ticket(root, ticket_id="cancelled-ticket", title="t", assignee="x", status="cancelled", days_old=1, days_since_update=0)
+    report = compute_status(root)
+    assert "cancelled-ticket" in [t.id for t in report.recently_closed]
+
+
+def test_all_terminal_statuses_excluded_from_open(tmp_path):
+    """Each documented terminal status keeps a ticket out of the open bucket."""
+    root = _make_workspace(tmp_path)
+    for status in TERMINAL_STATUSES:
+        _write_ticket(root, ticket_id=f"t-{status}", title="t", assignee="x", status=status, days_old=2)
+    # Plus one genuinely open ticket
+    _write_ticket(root, ticket_id="actually-open", title="t", assignee="x", status="open", days_old=2)
+
+    report = compute_status(root)
+    assert report.open_by_assignee == {"x": 1}
+
+
+def test_unknown_status_still_treated_as_open(tmp_path):
+    """Statuses outside the terminal set keep the ticket in the open bucket — strict opt-in."""
+    root = _make_workspace(tmp_path)
+    _write_ticket(root, ticket_id="custom", title="t", assignee="x", status="under-review", days_old=2)
+    report = compute_status(root)
+    assert report.open_by_assignee == {"x": 1}
 
 
 def test_parse_iso_handles_z_suffix():

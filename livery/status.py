@@ -25,6 +25,28 @@ from .doctor import run_doctor
 DEFAULT_STALE_DAYS = 7
 DEFAULT_RECENT_CLOSED_LIMIT = 5
 
+# Statuses that count as terminal — i.e. the ticket is no longer in the
+# active queue. Anything outside this set is treated as still-open by
+# `livery status`, which is why bare strings like "cancelled" used to
+# leak into the open bucket.
+#
+# `done` is the canonical close state set by `livery ticket close`.
+# `closed` is a synonym some users prefer.
+# `cancelled`, `abandoned`, `wontfix` cover the "decided not to do this"
+# cases.
+#
+# Users who introduce a custom terminal status will need to PR a new
+# entry here (and a doc note in docs/config.md). Worth that friction —
+# silently treating unknown statuses as "open" turned out to be the wrong
+# default.
+TERMINAL_STATUSES: frozenset[str] = frozenset({
+    "done",
+    "closed",
+    "cancelled",
+    "abandoned",
+    "wontfix",
+})
+
 
 @dataclass(slots=True)
 class TicketSummary:
@@ -139,8 +161,8 @@ def compute_status(
 ) -> StatusReport:
     """Build a StatusReport for the workspace at `root`. Pure: no UI."""
     tickets = _load_tickets(root)
-    open_tickets = [t for t in tickets if t.status not in {"done", "closed"}]
-    closed = [t for t in tickets if t.status in {"done", "closed"}]
+    open_tickets = [t for t in tickets if t.status not in TERMINAL_STATUSES]
+    closed = [t for t in tickets if t.status in TERMINAL_STATUSES]
 
     # Open count by assignee
     open_by_assignee: dict[str, int] = {}

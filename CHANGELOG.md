@@ -4,6 +4,15 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.6.3 — 2026-05-01
+
+### Fixed
+- `livery status` no longer treats `cancelled` (or `abandoned`, or `wontfix`) tickets as open. Previously the open/closed split was an exclusion of just `{done, closed}`, so any other terminal status leaked into the active queue and inflated stale counts. Terminal statuses are now an explicit set documented in `docs/config.md`.
+
+### Changed
+- `livery/status.py` exposes a public `TERMINAL_STATUSES` constant. New custom terminal statuses are an opt-in addition there (and a doc note in `docs/config.md`) — silent fall-through to "open" was the wrong default.
+- `docs/config.md` now documents the staleness convention explicitly: age is computed from `created`, not `updated`, so spec rewrites and thread comments don't reset the staleness clock.
+
 ## 0.6.2 — 2026-04-30
 
 ### Added
