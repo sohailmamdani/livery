@@ -54,6 +54,8 @@ You should see the top-level commands: `init`, `hire`, `doctor`, `ticket`, `disp
 uv tool upgrade livery
 ```
 
+The install above floats with `main` (no `@v0.x.y` pin), so `uv tool upgrade` picks up new releases automatically. If you ever pinned the install with `@v...`, `uv tool upgrade` becomes a no-op — see the README's "Pinning to a specific version (advanced)" section for the recovery dance.
+
 ## Step 2: Check your runtimes
 
 Run `livery doctor` from anywhere — it works without a workspace:

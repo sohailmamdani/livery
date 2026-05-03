@@ -29,16 +29,10 @@ Prerequisites:
 1. **`uv`** — Astral's Python tool manager. Install: `curl -LsSf https://astral.sh/uv/install.sh | sh`.
 2. **At least one runtime** — Claude Code CLI, Codex CLI, Cursor Agent, Ollama, or LM Studio. You don't need all of them. Run `livery doctor` after install to see what's reachable.
 
-Install the `livery` command globally:
+Install the `livery` command globally — **floating with `main`** (this is what most people want):
 
 ```sh
 uv tool install --from git+https://github.com/sohailmamdani/livery.git livery
-```
-
-Pin to a specific version (recommended for stability):
-
-```sh
-uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.6.2' livery
 ```
 
 Update later:
@@ -48,6 +42,24 @@ uv tool upgrade livery
 ```
 
 After upgrading, run `livery upgrade-workspace` in any existing workspace to refresh framework-managed scaffolding without touching your custom content.
+
+### Pinning to a specific version (advanced)
+
+```sh
+uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.7.0' livery
+```
+
+**Important caveat:** pinning with `@v0.7.0` (or any git ref) makes `uv tool upgrade livery` a no-op forever — uv re-resolves the same pinned ref each time and concludes nothing has changed. To move a pinned install to a newer version, you have to reinstall with the new tag (or drop the pin entirely):
+
+```sh
+# move the pin forward
+uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.8.0' livery
+
+# or unpin and float with main
+uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git' livery
+```
+
+Check what your install is tracking with `cat ~/.local/share/uv/tools/livery/uv-receipt.toml` — if you see `?rev=...` in the git URL, you're pinned.
 
 ## Quickstart
 

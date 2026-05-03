@@ -4,6 +4,11 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.7.1 — 2026-05-02
+
+### Changed
+- README's install section reorganized: floating-with-`main` is now the headline command, and pinning is documented as an "advanced" variant with an explicit caveat that pinning disables `uv tool upgrade livery` (uv re-resolves the same git ref each time and concludes nothing changed). Adds the recovery dance: reinstall with the new tag (or drop the pin entirely) to move the install forward. `docs/first-setup.md` cross-references the same caveat. Documentation-only release prompted by a real bite from the maintainer's own usage.
+
 ## 0.7.0 — 2026-05-01
 
 ### Added
