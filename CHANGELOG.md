@@ -4,6 +4,11 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.8.2 — 2026-05-02
+
+### Added
+- `livery sync-cos` — mirror user content from one convention file (`CLAUDE.md`, `AGENTS.md`, …) to all its siblings. Source defaults to whichever sibling was modified most recently; override with `--from FILENAME`. Each target's `LIVERY-MANAGED` block is refreshed to current as part of the sync. Dry-run by default; `--apply` writes. Closes the drift gap surfaced by real usage — v0.8.1's mirror-on-create only helped when files didn't exist; this handles ongoing drift between existing siblings.
+
 ## 0.8.1 — 2026-05-02
 
 ### Fixed

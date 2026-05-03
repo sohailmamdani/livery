@@ -295,6 +295,60 @@ def compute_plan(root: Path) -> UpgradePlan:
     return UpgradePlan(workspace_root=root, cos_engines=engine_ids, items=items)
 
 
+def compute_sync_plan(root: Path, source_filename: str | None = None) -> UpgradePlan:
+    """Plan to mirror user content from one convention file to all its siblings.
+
+    `source_filename` (e.g. "CLAUDE.md") picks the canonical file. If omitted,
+    the most-recently-modified existing convention file wins. The framework's
+    managed block on every target is refreshed to current as part of the
+    rewrite — so a sync also doubles as an upgrade-workspace pass on those
+    files.
+
+    Skips entirely (returns no items) when fewer than two convention files
+    exist — there's nothing to sync between.
+    """
+    engine_ids, _, _, _ = _read_workspace_meta(root)
+    convention_paths = [root / fn for fn in convention_files_for(engine_ids)]
+    existing = [p for p in convention_paths if p.is_file()]
+
+    if len(existing) < 2:
+        return UpgradePlan(workspace_root=root, cos_engines=engine_ids, items=[])
+
+    if source_filename is not None:
+        source = root / source_filename
+        if source not in existing:
+            available = ", ".join(p.name for p in existing)
+            raise ValueError(
+                f"--from {source_filename!r} doesn't match an existing convention file. "
+                f"Available: {available}"
+            )
+    else:
+        source = max(existing, key=lambda p: p.stat().st_mtime)
+
+    desired = _refresh_in_place(source.read_text(), COS_MANAGED_BLOCK)
+
+    items: list[PlanItem] = []
+    for target in existing:
+        if target == source:
+            continue
+        current = target.read_text()
+        if current == desired:
+            items.append(PlanItem(
+                path=target,
+                action=Action.SKIP,
+                reason=f"already in sync with {source.name}",
+            ))
+        else:
+            items.append(PlanItem(
+                path=target,
+                action=Action.REFRESH,
+                reason=f"syncing user content from {source.name} (and refreshing framework block)",
+                new_content=desired,
+            ))
+
+    return UpgradePlan(workspace_root=root, cos_engines=engine_ids, items=items)
+
+
 def apply_plan(plan: UpgradePlan, force: bool = False) -> list[PlanItem]:
     """Execute the plan. Returns the items that were actually written."""
     written: list[PlanItem] = []

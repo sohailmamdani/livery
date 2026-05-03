@@ -22,7 +22,7 @@ from .init import SUPPORTED_COS_ENGINES, init_workspace
 from .onboard import run_onboarding
 from .paths import find_root
 from .status import DEFAULT_RECENT_CLOSED_LIMIT, DEFAULT_STALE_DAYS, compute_status
-from .upgrade import Action, apply_plan, compute_plan
+from .upgrade import Action, apply_plan, compute_plan, compute_sync_plan
 from .telegram import (
     DEFAULT_LIVERY_BOT_COMMANDS,
     send_message,
@@ -790,6 +790,62 @@ def status(
     # Runtimes
     runtime_color = GREEN if report.runtimes_ok == report.runtimes_total else YELLOW
     typer.echo(c(f"Runtimes: {report.runtimes_ok}/{report.runtimes_total} ok", runtime_color))
+
+
+@app.command("sync-cos")
+def sync_cos(
+    source: Optional[str] = typer.Option(
+        None, "--from",
+        help="Convention file to use as source (e.g. CLAUDE.md). Default: most recently modified.",
+    ),
+    apply: bool = typer.Option(
+        False, "--apply",
+        help="Actually write changes (default: dry-run preview only).",
+    ),
+) -> None:
+    """Mirror user content from one convention file to all its siblings.
+
+    Useful when you've edited CLAUDE.md and want AGENTS.md (and any other
+    sibling convention file) to reflect the same changes — or vice versa.
+    Source defaults to whichever sibling was modified most recently;
+    override with `--from CLAUDE.md`.
+
+    The framework's LIVERY-MANAGED block on every target is refreshed to
+    current as part of the rewrite. Files outside the convention-file set
+    (livery.toml, agents/, tickets/, skills) are untouched.
+    """
+    root = find_root()
+    try:
+        plan = compute_sync_plan(root, source_filename=source)
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"Workspace: {root}")
+    if not plan.items:
+        typer.echo("Nothing to sync — fewer than two convention files in this workspace.")
+        return
+
+    label = {
+        Action.SKIP: "ok    ",
+        Action.REFRESH: "sync  ",
+    }
+    for item in plan.items:
+        rel = item.path.relative_to(root)
+        typer.echo(f"  [{label.get(item.action, item.action.value)}] {rel}")
+        if item.action != Action.SKIP:
+            typer.echo(f"           — {item.reason}")
+
+    if not plan.has_changes:
+        typer.echo("\nAll convention files already in sync.")
+        return
+
+    if not apply:
+        typer.echo("\n(dry-run; pass --apply to make changes)")
+        return
+
+    written = apply_plan(plan)
+    typer.echo(f"\nSynced {len(written)} file(s).")
 
 
 @app.command("upgrade-workspace")

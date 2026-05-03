@@ -211,6 +211,18 @@ livery upgrade-workspace --apply  # actually write changes
 
 Hard guardrails: it never touches `livery.toml`, `agents/`, `tickets/`, or anything outside the `LIVERY-MANAGED` markers in your CoS convention files. Safe to run after every `uv tool upgrade livery`.
 
+## Sync convention files
+
+If you've edited `CLAUDE.md` and want `AGENTS.md` (or vice versa) to reflect the same content, run:
+
+```sh
+livery sync-cos                        # dry-run preview
+livery sync-cos --apply                # actually write
+livery sync-cos --from AGENTS.md       # explicit source (default: most recently modified)
+```
+
+This mirrors user content from one sibling convention file to all the others, with each target's framework block refreshed to current. Useful when you maintain CLAUDE.md as the canonical file but also want Codex/Pi/OpenCode users to get the same workspace context.
+
 ## Telegram
 
 Register the bot's slash commands with Telegram (one-time):

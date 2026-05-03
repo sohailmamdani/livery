@@ -6,7 +6,7 @@ import pytest
 
 from livery.cos_engines import MANAGED_BEGIN, MANAGED_END, wrap_managed
 from livery.init import COS_MANAGED_BLOCK, NEW_TICKET_SKILL, init_workspace
-from livery.upgrade import Action, apply_plan, compute_plan
+from livery.upgrade import Action, apply_plan, compute_plan, compute_sync_plan
 
 
 def _fresh_workspace(tmp_path: Path, cos_engine: str = "both") -> Path:
@@ -318,3 +318,80 @@ def test_apply_plan_never_touches_user_files(tmp_path):
     assert (root / "tickets" / "ticket.md").read_text() == "ticket"
     # User customization in CLAUDE.md preserved
     assert "never close on Fridays" in claude.read_text()
+
+
+# -----------------------------------------------------------------------------
+# `livery sync-cos` — mirror user content from one convention file to siblings
+# -----------------------------------------------------------------------------
+
+
+def test_sync_no_op_when_only_one_convention_file(tmp_path):
+    """sync-cos against a single-engine workspace has nothing to sync."""
+    root = _fresh_workspace(tmp_path, cos_engine="claude_code")
+    plan = compute_sync_plan(root)
+    assert plan.items == []
+
+
+def test_sync_no_op_when_already_in_sync(tmp_path):
+    """Right after init, both convention files are identical → nothing to do."""
+    root = _fresh_workspace(tmp_path, cos_engine="both")
+    plan = compute_sync_plan(root)
+    assert all(i.action == Action.SKIP for i in plan.items)
+    assert not plan.has_changes
+
+
+def test_sync_propagates_user_edit_from_most_recent(tmp_path):
+    """User edits CLAUDE.md → sync mirrors that into AGENTS.md."""
+    root = _fresh_workspace(tmp_path, cos_engine="both")
+    claude = root / "CLAUDE.md"
+    agents = root / "AGENTS.md"
+
+    # Edit CLAUDE.md and bump its mtime to make it the most-recent.
+    new_claude = claude.read_text() + "\n## My new conventions\n\n- always do X\n"
+    claude.write_text(new_claude)
+    import os, time
+    os.utime(claude, (time.time(), time.time()))
+    os.utime(agents, (time.time() - 100, time.time() - 100))
+
+    plan = compute_sync_plan(root)
+    sync_item = next(i for i in plan.items if i.path == agents)
+    assert sync_item.action == Action.REFRESH
+    assert "always do X" in sync_item.new_content
+    assert "from CLAUDE.md" in sync_item.reason
+
+
+def test_sync_explicit_source_overrides_mtime(tmp_path):
+    """--from AGENTS.md picks AGENTS.md as source even if CLAUDE.md was modified more recently."""
+    root = _fresh_workspace(tmp_path, cos_engine="both")
+    claude = root / "CLAUDE.md"
+    agents = root / "AGENTS.md"
+
+    # Make AGENTS.md the divergent one + older mtime.
+    agents.write_text(agents.read_text() + "\n## AGENTS-only edit\n\nfrom Codex side.\n")
+    import os, time
+    os.utime(claude, (time.time(), time.time()))
+    os.utime(agents, (time.time() - 100, time.time() - 100))
+
+    plan = compute_sync_plan(root, source_filename="AGENTS.md")
+    claude_item = next(i for i in plan.items if i.path == claude)
+    assert claude_item.action == Action.REFRESH
+    assert "AGENTS-only edit" in claude_item.new_content
+    assert "from AGENTS.md" in claude_item.reason
+
+
+def test_sync_apply_writes_changes_idempotently(tmp_path):
+    root = _fresh_workspace(tmp_path, cos_engine="both")
+    claude = root / "CLAUDE.md"
+    claude.write_text(claude.read_text() + "\n## sync test\n")
+
+    apply_plan(compute_sync_plan(root))
+    # Second pass: in sync now
+    plan2 = compute_sync_plan(root)
+    assert all(i.action == Action.SKIP for i in plan2.items)
+
+
+def test_sync_explicit_source_unknown_file_raises(tmp_path):
+    root = _fresh_workspace(tmp_path, cos_engine="both")
+    with pytest.raises(ValueError) as ei:
+        compute_sync_plan(root, source_filename="nonexistent.md")
+    assert "doesn't match" in str(ei.value)
