@@ -878,7 +878,7 @@ def install_hooks_cmd(
 def sync_cos(
     source: Optional[str] = typer.Option(
         None, "--from",
-        help="Convention file to use as source (e.g. CLAUDE.md). Default: most recently modified.",
+        help="Convention file to use as source (e.g. CLAUDE.md). Default: file with the most user content.",
     ),
     apply: bool = typer.Option(
         False, "--apply",
@@ -889,8 +889,9 @@ def sync_cos(
 
     Useful when you've edited CLAUDE.md and want AGENTS.md (and any other
     sibling convention file) to reflect the same changes — or vice versa.
-    Source defaults to whichever sibling was modified most recently;
-    override with `--from CLAUDE.md`.
+    Source defaults to whichever sibling has the most user content (so a
+    freshly-scaffolded template file can never overwrite a long-edited
+    one). Override with `--from CLAUDE.md` if you need a specific source.
 
     The framework's LIVERY-MANAGED block on every target is refreshed to
     current as part of the rewrite. Files outside the convention-file set

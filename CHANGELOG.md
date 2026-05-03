@@ -4,6 +4,14 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.8.5 — 2026-05-02
+
+### Fixed
+- **Critical: `livery sync-cos` no longer clobbers a long-edited convention file with a freshly-scaffolded template one.** v0.8.2's "most recently modified" source picker was wrong — a bare-template `AGENTS.md` created by `upgrade-workspace` (on v0.8.0, before the v0.8.1 mirror fix) had a newer mtime than a long-edited `CLAUDE.md`, and `sync-cos` would treat the template file as canonical and overwrite the rich one. **The fix:** source picker now ranks files by user content size (everything outside the LIVERY-MANAGED block, ignoring the bare template scaffold). Bare-template files score zero and can never win against a file with real edits. mtime is only the tiebreaker when content size is equal. `--from FILENAME` still works as an explicit override but is no longer needed for the common case.
+
+### Recovery
+- If you ran `sync-cos` on v0.8.2–v0.8.4 and got a template-overwritten convention file, recover from git: `git checkout HEAD -- CLAUDE.md` (uncommitted) or `git checkout <sha> -- CLAUDE.md` (committed). Then re-run `sync-cos --apply` on this version to propagate the rich content correctly.
+
 ## 0.8.4 — 2026-05-02
 
 ### Added

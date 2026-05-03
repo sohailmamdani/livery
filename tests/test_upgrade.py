@@ -340,18 +340,14 @@ def test_sync_no_op_when_already_in_sync(tmp_path):
     assert not plan.has_changes
 
 
-def test_sync_propagates_user_edit_from_most_recent(tmp_path):
+def test_sync_propagates_user_edit_from_richer_file(tmp_path):
     """User edits CLAUDE.md → sync mirrors that into AGENTS.md."""
     root = _fresh_workspace(tmp_path, cos_engine="both")
     claude = root / "CLAUDE.md"
     agents = root / "AGENTS.md"
 
-    # Edit CLAUDE.md and bump its mtime to make it the most-recent.
-    new_claude = claude.read_text() + "\n## My new conventions\n\n- always do X\n"
-    claude.write_text(new_claude)
-    import os, time
-    os.utime(claude, (time.time(), time.time()))
-    os.utime(agents, (time.time() - 100, time.time() - 100))
+    # Add real user content to CLAUDE.md → it becomes the richer file.
+    claude.write_text(claude.read_text() + "\n## My new conventions\n\n- always do X\n")
 
     plan = compute_sync_plan(root)
     sync_item = next(i for i in plan.items if i.path == agents)
@@ -360,23 +356,59 @@ def test_sync_propagates_user_edit_from_most_recent(tmp_path):
     assert "from CLAUDE.md" in sync_item.reason
 
 
-def test_sync_explicit_source_overrides_mtime(tmp_path):
-    """--from AGENTS.md picks AGENTS.md as source even if CLAUDE.md was modified more recently."""
+def test_sync_explicit_source_overrides_default(tmp_path):
+    """--from picks the named file even if it's not the auto-default."""
     root = _fresh_workspace(tmp_path, cos_engine="both")
     claude = root / "CLAUDE.md"
     agents = root / "AGENTS.md"
 
-    # Make AGENTS.md the divergent one + older mtime.
+    # Make AGENTS.md the divergent one. Without --from, CLAUDE.md would still
+    # win on content-size (they're roughly equal — tie-breaker mtime would
+    # go to AGENTS.md, but we want to verify --from overrides regardless).
     agents.write_text(agents.read_text() + "\n## AGENTS-only edit\n\nfrom Codex side.\n")
-    import os, time
-    os.utime(claude, (time.time(), time.time()))
-    os.utime(agents, (time.time() - 100, time.time() - 100))
 
     plan = compute_sync_plan(root, source_filename="AGENTS.md")
     claude_item = next(i for i in plan.items if i.path == claude)
     assert claude_item.action == Action.REFRESH
     assert "AGENTS-only edit" in claude_item.new_content
     assert "from AGENTS.md" in claude_item.reason
+
+
+def test_sync_bare_template_never_clobbers_rich_file(tmp_path):
+    """Regression: bare-template AGENTS.md must not overwrite long-edited CLAUDE.md.
+
+    This was the v0.8.4 data-loss bug: AGENTS.md was created by upgrade-workspace
+    on v0.8.0 (before the v0.8.1 mirror fix existed) with the bare template, so
+    it had a much newer mtime than the user's rich CLAUDE.md. The mtime-based
+    source picker chose the template file and overwrote the rich content.
+    """
+    root = _fresh_workspace(tmp_path, cos_engine="both")
+    claude = root / "CLAUDE.md"
+    agents = root / "AGENTS.md"
+
+    # Sohail's CLAUDE.md: 100+ lines of real workspace content.
+    rich = claude.read_text() + "\n\n## BrandDB conventions\n\n" + "\n".join(
+        f"- conventional rule {i}: never speculate without sources" for i in range(50)
+    )
+    claude.write_text(rich)
+
+    # Bump AGENTS.md's mtime to "much newer than CLAUDE.md" (simulating the
+    # freshly-created bare-template scenario). It still has bare-template content.
+    import os
+    import time
+    later = time.time() + 1000
+    os.utime(agents, (later, later))
+    earlier = time.time() - 1000
+    os.utime(claude, (earlier, earlier))
+
+    plan = compute_sync_plan(root)
+    # CLAUDE.md (rich) must be the source, NOT AGENTS.md (bare template).
+    sync_item = next(i for i in plan.items if i.path == agents)
+    assert sync_item.action == Action.REFRESH
+    assert "BrandDB conventions" in sync_item.new_content, (
+        "AGENTS.md should be overwritten BY the rich CLAUDE.md content"
+    )
+    assert "from CLAUDE.md" in sync_item.reason
 
 
 def test_sync_apply_writes_changes_idempotently(tmp_path):

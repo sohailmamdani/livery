@@ -295,14 +295,60 @@ def compute_plan(root: Path) -> UpgradePlan:
     return UpgradePlan(workspace_root=root, cos_engines=engine_ids, items=items)
 
 
+def _user_content_score(path: Path) -> tuple[int, float]:
+    """Score how 'user-edited' a convention file looks.
+
+    Returns (substantive_chars, mtime). Higher tuple wins.
+
+    `substantive_chars` is the byte-length of everything *outside* the
+    LIVERY-MANAGED block AND outside the framework's bare user template
+    (`COS_USER_TEMPLATE` content). Files that contain only the bare
+    template score 0 — they have no user content. mtime is the tiebreaker
+    when two files have identical user content (rare; usually the result
+    of a recent sync).
+    """
+    try:
+        text = path.read_text()
+    except OSError:
+        return (0, 0.0)
+
+    # Strip the managed block (whatever's between LIVERY-MANAGED markers).
+    block_range = find_managed_block(text)
+    if block_range is not None:
+        start, end = block_range
+        outside_managed = text[:start] + text[end:]
+    else:
+        outside_managed = text
+
+    # Strip whitespace-only differences for a stable comparison.
+    normalized = "".join(outside_managed.split())
+
+    # Compare against the bare template's normalized form. If the file's
+    # outside-managed content matches the template byte-for-byte (ignoring
+    # whitespace), it's a freshly-scaffolded file with no user edits.
+    template_render = COS_USER_TEMPLATE.format(name="", description="")
+    template_normalized = "".join(template_render.split())
+
+    if normalized == template_normalized or template_normalized in normalized:
+        substantive = max(0, len(normalized) - len(template_normalized))
+    else:
+        substantive = len(normalized)
+
+    return (substantive, path.stat().st_mtime)
+
+
 def compute_sync_plan(root: Path, source_filename: str | None = None) -> UpgradePlan:
     """Plan to mirror user content from one convention file to all its siblings.
 
-    `source_filename` (e.g. "CLAUDE.md") picks the canonical file. If omitted,
-    the most-recently-modified existing convention file wins. The framework's
-    managed block on every target is refreshed to current as part of the
-    rewrite — so a sync also doubles as an upgrade-workspace pass on those
-    files.
+    `source_filename` (e.g. "CLAUDE.md") picks the canonical file explicitly.
+    If omitted, the framework picks automatically: the file with the most
+    user content (outside the LIVERY-MANAGED block, ignoring the bare
+    template) wins. mtime breaks ties.
+
+    This deliberately ignores mtime as the primary signal. Mtime is creation
+    time as much as edit time; a freshly-scaffolded file with the bare
+    template would score newer than a long-edited file and clobber it.
+    Content size is a much better proxy for "this is the canonical version."
 
     Skips entirely (returns no items) when fewer than two convention files
     exist — there's nothing to sync between.
@@ -323,7 +369,8 @@ def compute_sync_plan(root: Path, source_filename: str | None = None) -> Upgrade
                 f"Available: {available}"
             )
     else:
-        source = max(existing, key=lambda p: p.stat().st_mtime)
+        # Pick the file with the most user content. Ties broken by mtime.
+        source = max(existing, key=_user_content_score)
 
     desired = _refresh_in_place(source.read_text(), COS_MANAGED_BLOCK)
 
