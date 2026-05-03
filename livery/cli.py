@@ -22,6 +22,7 @@ from .init import SUPPORTED_COS_ENGINES, init_workspace
 from .onboard import run_onboarding
 from .paths import find_root
 from .status import DEFAULT_RECENT_CLOSED_LIMIT, DEFAULT_STALE_DAYS, compute_status
+from .hooks import HookStatus, install_hooks, uninstall_hooks
 from .upgrade import Action, apply_plan, compute_plan, compute_sync_plan
 from .telegram import (
     DEFAULT_LIVERY_BOT_COMMANDS,
@@ -598,6 +599,9 @@ def init(
     cos_files = [n for n in ("CLAUDE.md", "AGENTS.md") if (target / n).exists()]
     cos_hint = " or ".join(cos_files) if cos_files else "your CoS file"
     typer.echo(f"Next: `livery hire <agent-id>` to scaffold your first agent, or edit {cos_hint}.")
+    if len(cos_files) > 1:
+        typer.echo("Tip: `livery install-hooks` adds a pre-commit hook that keeps your")
+        typer.echo("     convention files in sync automatically.")
 
 
 def _prompt_runtime(default: Optional[str]) -> str:
@@ -790,6 +794,57 @@ def status(
     # Runtimes
     runtime_color = GREEN if report.runtimes_ok == report.runtimes_total else YELLOW
     typer.echo(c(f"Runtimes: {report.runtimes_ok}/{report.runtimes_total} ok", runtime_color))
+
+
+@app.command("install-hooks")
+def install_hooks_cmd(
+    uninstall: bool = typer.Option(
+        False, "--uninstall",
+        help="Remove Livery-managed hooks from .git/hooks/ instead of installing.",
+    ),
+    force: bool = typer.Option(
+        False, "--force",
+        help="Overwrite pre-existing user-written hooks. By default they're left alone.",
+    ),
+) -> None:
+    """Install Livery's git hooks into the workspace.
+
+    Currently installs:
+      - pre-commit — runs `livery sync-cos --apply` before each commit and
+        re-stages any convention files the sync touched. Keeps CLAUDE.md
+        and AGENTS.md from drifting silently.
+
+    Hooks are not auto-installed by `livery init` or `upgrade-workspace` —
+    .git/hooks/ is your territory, and this is an opt-in. Re-run any time
+    to refresh; safe to remove with `--uninstall`.
+    """
+    root = find_root()
+    try:
+        if uninstall:
+            results = uninstall_hooks(root)
+        else:
+            results = install_hooks(root, force=force)
+    except FileNotFoundError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    if not results:
+        typer.echo("Nothing to do.")
+        return
+
+    for r in results:
+        rel = r.path.relative_to(root)
+        typer.echo(f"  [{r.status.value}] {rel}")
+        if r.detail:
+            typer.echo(f"           — {r.detail}")
+
+    has_skipped = any(r.status == HookStatus.SKIPPED for r in results)
+    if has_skipped and not force and not uninstall:
+        typer.echo(
+            "\nSome hooks weren't touched because they look user-written. "
+            "Pass --force to overwrite them.",
+            err=True,
+        )
 
 
 @app.command("sync-cos")

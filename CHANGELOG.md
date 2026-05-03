@@ -4,6 +4,15 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.8.3 — 2026-05-02
+
+### Added
+- `livery install-hooks` — installs Livery's pre-commit hook into `.git/hooks/`. The hook runs `livery sync-cos --apply` before each commit and re-stages any convention files the sync touched, so CLAUDE.md / AGENTS.md don't drift between commits. Idempotent: re-running refreshes the hook if it's drifted from the shipped content. Refuses to overwrite user-written hooks without `--force`. Pass `--uninstall` to remove. Hooks are NOT auto-installed by `init` or `upgrade-workspace` — `.git/hooks/` is your territory; this is opt-in.
+- `livery init`'s "Next steps" output now mentions `install-hooks` when more than one CoS convention file is scaffolded.
+
+### Other
+- Tests: 159 (was 148). The 11 new tests cover install/refresh/uninstall paths, the user-written-hook detection, and `--force` overwrite semantics.
+
 ## 0.8.2 — 2026-05-02
 
 ### Added
