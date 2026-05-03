@@ -21,6 +21,7 @@ import typer
 from .cos_engines import COS_ENGINES, resolve_engines
 from .doctor import run_doctor
 from .hire import SUGGESTED_MODELS, SUPPORTED_RUNTIMES, hire_agent
+from .hooks import install_hooks
 from .init import init_workspace
 from .paths import find_root
 
@@ -129,6 +130,29 @@ def _check_workspace(cwd: Path) -> Optional[Path]:
     _ok(f"Initialized workspace '{name}' at {cwd}")
     for p in created:
         typer.echo(f"    + {p.relative_to(cwd)}")
+
+    # If multiple convention files were scaffolded and we're in a git repo,
+    # offer the pre-commit sync-cos hook. Same prompt as `livery init`.
+    cos_files = [n for n in ("CLAUDE.md", "AGENTS.md") if (cwd / n).exists()]
+    if len(cos_files) > 1 and (cwd / ".git").is_dir():
+        typer.echo("")
+        typer.echo(
+            f"You scaffolded {len(cos_files)} convention files ({', '.join(cos_files)})."
+        )
+        typer.echo(
+            "A pre-commit hook can keep them in sync — every `git commit` would run"
+        )
+        typer.echo(
+            "`livery sync-cos --apply` and re-stage any changes it produced."
+        )
+        if typer.confirm("Install the pre-commit hook now?", default=True):
+            try:
+                results = install_hooks(cwd)
+                for r in results:
+                    typer.echo(f"    [{r.status.value}] {r.path.relative_to(cwd)}")
+            except FileNotFoundError as e:
+                _warn(str(e))
+
     return cwd
 
 

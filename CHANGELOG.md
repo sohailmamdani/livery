@@ -4,6 +4,11 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.8.4 — 2026-05-02
+
+### Added
+- `livery init` and `livery onboard` now proactively offer to install the pre-commit sync-cos hook when (a) multiple CoS convention files were just scaffolded, (b) the workspace is a git repo, and (c) the session is interactive. Default answer is "yes" — saying yes installs the hook in one go; saying no leaves the existing "Tip: `livery install-hooks`" line as the fallback. Non-interactive runs (scripts, CI) skip the prompt silently.
+
 ## 0.8.3 — 2026-05-02
 
 ### Added

@@ -596,10 +596,37 @@ def init(
     for p in created:
         typer.echo(f"  + {p.relative_to(target)}")
     typer.echo()
+
+    # If the workspace has multiple CoS convention files and we're inside a
+    # git repo, offer to install the pre-commit sync-cos hook. Skip silently
+    # in non-interactive mode (scripts) and when no git repo exists yet.
     cos_files = [n for n in ("CLAUDE.md", "AGENTS.md") if (target / n).exists()]
+    if (
+        len(cos_files) > 1
+        and should_prompt
+        and (target / ".git").is_dir()
+    ):
+        typer.echo(
+            f"You scaffolded {len(cos_files)} convention files ({', '.join(cos_files)})."
+        )
+        typer.echo(
+            "A pre-commit hook can keep them in sync automatically — every `git commit`"
+        )
+        typer.echo(
+            "would run `livery sync-cos --apply` and re-stage any changes it produced."
+        )
+        if typer.confirm("Install the pre-commit hook now?", default=True):
+            try:
+                results = install_hooks(target)
+                for r in results:
+                    typer.echo(f"  [{r.status.value}] {r.path.relative_to(target)}")
+            except FileNotFoundError as e:
+                typer.echo(f"  (skipped: {e})", err=True)
+            typer.echo()
+
     cos_hint = " or ".join(cos_files) if cos_files else "your CoS file"
     typer.echo(f"Next: `livery hire <agent-id>` to scaffold your first agent, or edit {cos_hint}.")
-    if len(cos_files) > 1:
+    if len(cos_files) > 1 and not (target / ".git" / "hooks" / "pre-commit").is_file():
         typer.echo("Tip: `livery install-hooks` adds a pre-commit hook that keeps your")
         typer.echo("     convention files in sync automatically.")
 
