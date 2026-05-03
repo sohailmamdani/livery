@@ -4,6 +4,21 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.8.1 — 2026-05-02
+
+### Fixed
+- `livery upgrade-workspace` now **mirrors user content from a sibling convention file** when creating a new one. Previously, opting into Codex on a workspace that already had `CLAUDE.md` produced a bare-template `AGENTS.md` with the framework block but none of the user's customizations (workspace conventions, hired-agent notes, project-specific rules). Now it copies the sibling's user-editable section into the new file with the framework's managed block refreshed to current. Falls back to the bare template only when no sibling exists (fresh init case). Handles legacy sibling files with no `LIVERY-MANAGED` markers — prepends a fresh block to their content.
+
+### Migration note for existing users
+- If you already opted into a new engine on a v0.8.0 install (or earlier) and ended up with a bare-template AGENTS.md (or CLAUDE.md), regenerate it via the new mirror behavior:
+
+  ```sh
+  rm AGENTS.md  # or CLAUDE.md
+  livery upgrade-workspace --apply
+  ```
+
+  The framework will recreate it from the sibling's content, with your customizations carried over.
+
 ## 0.8.0 — 2026-05-02
 
 ### Added

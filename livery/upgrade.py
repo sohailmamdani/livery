@@ -157,15 +157,52 @@ def _plan_toml_migration(toml_path: Path, engines: list[str]) -> PlanItem:
     )
 
 
+def _refresh_in_place(content: str, fresh_managed_block: str) -> str:
+    """Return `content` with its LIVERY-MANAGED block replaced by the current
+    framework block (or a fresh block prepended if no markers were present).
+    """
+    fresh_wrapped = wrap_managed(fresh_managed_block)
+    block_range = find_managed_block(content)
+    if block_range is None:
+        return fresh_wrapped + "\n" + content
+    start, end = block_range
+    return content[:start] + fresh_wrapped.rstrip() + content[end:]
+
+
 def _plan_convention_file(
     path: Path,
     fresh_managed_block: str,
     workspace_name: str,
     workspace_description: str,
+    sibling_paths: list[Path],
 ) -> PlanItem:
-    """Decide what to do with a convention file (CLAUDE.md, AGENTS.md, ...)."""
+    """Decide what to do with a convention file (CLAUDE.md, AGENTS.md, ...).
+
+    When the file is missing AND another convention file (sibling) already
+    exists on disk, mirror the sibling's user content into the new file —
+    with the framework's managed block refreshed to current. This is what
+    makes "add Codex to an existing claude_code-only workspace" produce an
+    AGENTS.md that actually has the user's CLAUDE.md customizations, rather
+    than a bare template.
+    """
     if not path.exists():
-        # Brand-new file: managed block + user template (same shape as init).
+        # Look for a sibling convention file already on disk to mirror from.
+        # `sibling_paths` is every convention file path the workspace targets;
+        # we exclude `path` itself and pick the first one that exists.
+        mirror_source = next(
+            (p for p in sibling_paths if p != path and p.is_file()),
+            None,
+        )
+        if mirror_source is not None:
+            mirrored = _refresh_in_place(mirror_source.read_text(), fresh_managed_block)
+            return PlanItem(
+                path=path,
+                action=Action.CREATE,
+                reason=f"convention file missing — mirroring from {mirror_source.name} (framework block refreshed)",
+                new_content=mirrored,
+            )
+
+        # No sibling to mirror — write the fresh template (init-style).
         user_body = COS_USER_TEMPLATE.format(
             name=workspace_name,
             description=workspace_description or "(Describe your workspace here.)",
@@ -235,9 +272,11 @@ def compute_plan(root: Path) -> UpgradePlan:
     if is_legacy and toml_path.is_file():
         items.append(_plan_toml_migration(toml_path, engine_ids))
 
-    for filename in convention_files_for(engine_ids):
+    convention_filenames = convention_files_for(engine_ids)
+    convention_paths = [root / fn for fn in convention_filenames]
+    for path in convention_paths:
         items.append(_plan_convention_file(
-            root / filename, COS_MANAGED_BLOCK, name, description,
+            path, COS_MANAGED_BLOCK, name, description, convention_paths,
         ))
 
     for eid in engine_ids:

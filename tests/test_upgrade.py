@@ -32,7 +32,71 @@ def test_compute_plan_creates_missing_convention_file(tmp_path):
     agents_item = next(i for i in plan.items if i.path.name == "AGENTS.md")
     assert agents_item.action == Action.CREATE
     assert MANAGED_BEGIN in agents_item.new_content
-    assert "## Custom conventions for the CoS" in agents_item.new_content
+    # When a sibling exists, the new file mirrors it instead of using the bare template
+    assert "mirroring from CLAUDE.md" in agents_item.reason
+
+
+def test_create_mirrors_user_content_from_sibling(tmp_path):
+    """User customizations in CLAUDE.md should appear in a newly-created AGENTS.md."""
+    root = _fresh_workspace(tmp_path, cos_engine="claude_code")
+    # Add user content to CLAUDE.md, then opt into Codex
+    claude = root / "CLAUDE.md"
+    user_section = "\n## My BrandDB conventions\n\n- Cite or don't state.\n- No speculation about people.\n"
+    claude.write_text(claude.read_text() + user_section)
+
+    # Switch the workspace to claude_code + codex
+    toml_text = (root / "livery.toml").read_text().replace(
+        '"claude_code"', '"claude_code", "codex"',
+    )
+    (root / "livery.toml").write_text(toml_text)
+
+    plan = compute_plan(root)
+    agents_item = next(i for i in plan.items if i.path.name == "AGENTS.md")
+    assert agents_item.action == Action.CREATE
+    # The user's BrandDB section should be in the new AGENTS.md
+    assert "Cite or don't state." in agents_item.new_content
+    assert "No speculation about people." in agents_item.new_content
+    # And the framework block is fresh, not stale
+    assert MANAGED_BEGIN in agents_item.new_content
+
+
+def test_create_uses_template_when_no_sibling_exists(tmp_path):
+    """Brand-new workspace with neither convention file → fresh template, not a mirror."""
+    root = tmp_path / "fresh"
+    root.mkdir()
+    (root / "livery.toml").write_text(
+        'name = "fresh"\ncos_engines = ["claude_code", "codex"]\n'
+    )
+    (root / "agents").mkdir()
+    (root / "tickets").mkdir()
+    # Note: no CLAUDE.md, no AGENTS.md
+
+    plan = compute_plan(root)
+    claude_item = next(i for i in plan.items if i.path.name == "CLAUDE.md")
+    assert claude_item.action == Action.CREATE
+    assert "Custom conventions for the CoS" in claude_item.new_content
+    assert "mirroring from" not in claude_item.reason
+
+
+def test_create_mirrors_legacy_sibling_with_no_managed_block(tmp_path):
+    """If the sibling is a pre-markers legacy file, the new file gets a managed block prepended + the legacy content."""
+    root = tmp_path / "legacy"
+    root.mkdir()
+    (root / "livery.toml").write_text(
+        'name = "legacy"\ncos_engines = ["claude_code", "codex"]\n'
+    )
+    (root / "agents").mkdir()
+    (root / "tickets").mkdir()
+    # Legacy CLAUDE.md with no markers but real user content
+    (root / "CLAUDE.md").write_text("# legacy\n\nLots of Sohail-specific stuff here.\n")
+
+    plan = compute_plan(root)
+    agents_item = next(i for i in plan.items if i.path.name == "AGENTS.md")
+    assert agents_item.action == Action.CREATE
+    # Managed block prepended
+    assert agents_item.new_content.startswith(MANAGED_BEGIN)
+    # Legacy user content preserved
+    assert "Lots of Sohail-specific stuff here." in agents_item.new_content
 
 
 def test_compute_plan_refreshes_stale_managed_block(tmp_path):
