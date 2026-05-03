@@ -4,6 +4,14 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.8.0 — 2026-05-02
+
+### Added
+- `livery upgrade-workspace` now performs a one-time migration on legacy workspaces (created before `cos_engines` existed in `livery.toml`). The migration appends `cos_engines = ["claude_code", "codex", "pi", "opencode"]` to `livery.toml` (preserving all existing content + comments) and then scaffolds files for every currently-supported engine. After migration, the workspace is on the modern config and subsequent upgrades respect whatever the user leaves in the `cos_engines` list. New `Action.MIGRATE` plan item type renders as `[migrate]` in dry-run output. (Closes the gap where existing workspaces couldn't get AGENTS.md and other Codex/Pi/OpenCode files added retroactively.)
+
+### Changed
+- `livery upgrade-workspace`'s "never touches livery.toml" rule now has one documented exception: the legacy migration above. The migration is additive only (writes a missing field), idempotent (no-op on second run), and TOML-aware (insertion happens before any `[section]` headers so the file stays parseable). Workspaces with `cos_engines` already set are still untouched.
+
 ## 0.7.1 — 2026-05-02
 
 ### Changed

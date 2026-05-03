@@ -48,9 +48,13 @@ Valid values: `codex`, `claude_code`, `cursor`, `lm_studio`, `ollama`.
 
 #### `cos_engines` (list of strings, optional)
 
-Which CoS engines this workspace targets. Used by `livery upgrade-workspace` to decide which convention files (`CLAUDE.md`, `AGENTS.md`, ...) and skill directories (`.claude/skills/`, `.agents/skills/`) to manage. Written automatically by `livery init` based on `--cos-engine`. Legacy workspaces without this field fall back to detection from existing files.
+Which CoS engines this workspace targets. Used by `livery upgrade-workspace` to decide which convention files (`CLAUDE.md`, `AGENTS.md`, ...) and skill directories (`.claude/skills/`, `.agents/skills/`) to manage. Written automatically by `livery init` based on `--cos-engine`.
 
 Valid entries: `claude_code`, `codex`, `pi`, `opencode`. Pass any combination as a comma-separated value to `livery init --cos-engine`, e.g. `--cos-engine claude_code,pi`.
+
+**Legacy workspaces without this field** (created before v0.5.0) get a one-time migration the first time `livery upgrade-workspace --apply` is run on them. The migration appends `cos_engines = ["claude_code", "codex", "pi", "opencode"]` to `livery.toml` (preserving all existing content + comments), then scaffolds files for every supported engine — the "full benefits" reading. To opt out of an engine afterward, edit the list. Subsequent upgrades respect whatever you leave there.
+
+To **add a new CoS engine to an existing modern workspace**, edit the `cos_engines` list in `livery.toml` and re-run `livery upgrade-workspace --apply`. The framework will scaffold the new engine's convention file and skill directory. To **remove** an engine, just delete it from the list — `upgrade-workspace` won't actively delete the existing files, but it'll stop managing them.
 
 #### `[telegram]` table
 

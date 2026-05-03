@@ -99,8 +99,10 @@ def test_compute_plan_creates_missing_skill(tmp_path):
     assert item.new_content == NEW_TICKET_SKILL
 
 
-def test_compute_plan_detects_engines_from_files_when_toml_silent(tmp_path):
-    """Legacy livery.toml without cos_engines field → detect from existing files."""
+def test_compute_plan_legacy_workspace_migrates_to_all_engines(tmp_path):
+    """Legacy livery.toml without cos_engines → upgrade-workspace migrates to ALL supported engines."""
+    from livery.upgrade import ALL_SUPPORTED_ENGINES, Action
+
     root = tmp_path / "legacy"
     root.mkdir()
     (root / "livery.toml").write_text('name = "legacy"\n')
@@ -109,8 +111,90 @@ def test_compute_plan_detects_engines_from_files_when_toml_silent(tmp_path):
     (root / "tickets").mkdir()
 
     plan = compute_plan(root)
-    assert "claude_code" in plan.cos_engines
-    assert "codex" not in plan.cos_engines
+    # All engines are now in the plan, not just the detected one
+    assert plan.cos_engines == ALL_SUPPORTED_ENGINES
+    # And there's a MIGRATE item for livery.toml
+    migrate_items = [i for i in plan.items if i.action == Action.MIGRATE]
+    assert len(migrate_items) == 1
+    assert migrate_items[0].path == root / "livery.toml"
+    # Migration content includes a cos_engines line with all engines
+    assert "cos_engines = [" in migrate_items[0].new_content
+    for engine in ALL_SUPPORTED_ENGINES:
+        assert f'"{engine}"' in migrate_items[0].new_content
+
+
+def test_legacy_migration_inserts_before_section_header(tmp_path):
+    """TOML quirk: top-level keys can't follow a [section] header. Verify insertion order."""
+    import tomllib
+
+    from livery.upgrade import Action, apply_plan
+
+    root = tmp_path / "legacy"
+    root.mkdir()
+    # livery-im-style: top-level fields, then a [telegram] table
+    (root / "livery.toml").write_text(
+        'name = "legacy"\n'
+        'description = "x"\n'
+        '\n'
+        '[telegram]\n'
+        'chat_id = "-100123"\n'
+    )
+    (root / "agents").mkdir()
+    (root / "tickets").mkdir()
+
+    plan = compute_plan(root)
+    apply_plan(plan)
+
+    # After apply, livery.toml must still be valid TOML AND have cos_engines
+    # at top-level (not nested inside [telegram]).
+    parsed = tomllib.loads((root / "livery.toml").read_text())
+    assert "cos_engines" in parsed
+    assert isinstance(parsed["cos_engines"], list)
+    # And [telegram] still parses correctly
+    assert parsed["telegram"]["chat_id"] == "-100123"
+
+
+def test_legacy_migration_idempotent(tmp_path):
+    """Once migrated, subsequent runs see the cos_engines field and skip the migrate step."""
+    from livery.upgrade import Action, apply_plan
+
+    root = tmp_path / "legacy"
+    root.mkdir()
+    (root / "livery.toml").write_text('name = "legacy"\n')
+    (root / "agents").mkdir()
+    (root / "tickets").mkdir()
+
+    apply_plan(compute_plan(root))
+    second_plan = compute_plan(root)
+    migrate_items = [i for i in second_plan.items if i.action == Action.MIGRATE]
+    assert migrate_items == []  # no migration needed second time around
+
+
+def test_legacy_migration_preserves_existing_content(tmp_path):
+    """Migration is purely additive — existing fields, comments, and sections stay verbatim."""
+    from livery.upgrade import apply_plan
+
+    root = tmp_path / "legacy"
+    root.mkdir()
+    original_body = (
+        "# A comment.\n"
+        'name = "legacy"\n'
+        'description = "I should survive"\n'
+        '\n'
+        '[telegram]\n'
+        '# inline comment\n'
+        'chat_id = "-100123"\n'
+    )
+    (root / "livery.toml").write_text(original_body)
+    (root / "agents").mkdir()
+    (root / "tickets").mkdir()
+
+    apply_plan(compute_plan(root))
+    new_body = (root / "livery.toml").read_text()
+
+    # Every line of the original is still present
+    for line in original_body.splitlines():
+        assert line in new_body
 
 
 def test_compute_plan_supports_pi_workspace(tmp_path):

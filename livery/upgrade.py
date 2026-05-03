@@ -39,6 +39,12 @@ from .cos_engines import (
     resolve_engines,
     wrap_managed,
 )
+
+# When a legacy workspace (no `cos_engines` field in livery.toml) is upgraded,
+# this is the engine list it migrates onto. "Full benefits" — every engine
+# Livery currently ships with. Users can trim afterward by editing
+# livery.toml; subsequent upgrades respect whatever they leave there.
+ALL_SUPPORTED_ENGINES: list[str] = list(COS_ENGINES.keys())
 from .init import (
     COS_MANAGED_BLOCK,
     COS_USER_TEMPLATE,
@@ -48,11 +54,12 @@ from .init import (
 
 
 class Action(Enum):
-    SKIP = "skip"        # nothing to do
-    CREATE = "create"    # file missing → write fresh
-    REFRESH = "refresh"  # managed block exists but content drifted → rewrite block only
-    INSERT = "insert"    # convention file exists with no markers → prepend a managed block
-    WARN = "warn"        # framework-managed file customized; skip without --force
+    SKIP = "skip"          # nothing to do
+    CREATE = "create"      # file missing → write fresh
+    REFRESH = "refresh"    # managed block exists but content drifted → rewrite block only
+    INSERT = "insert"      # convention file exists with no markers → prepend a managed block
+    MIGRATE = "migrate"    # legacy livery.toml gets a `cos_engines` field appended
+    WARN = "warn"          # framework-managed file customized; skip without --force
 
 
 @dataclass(slots=True)
@@ -74,15 +81,23 @@ class UpgradePlan:
         return any(i.action != Action.SKIP for i in self.items)
 
 
-def _read_workspace_meta(root: Path) -> tuple[list[str], str, str]:
-    """Pull cos_engines + name + description from livery.toml. Falls back to detection.
+def _read_workspace_meta(root: Path) -> tuple[list[str], str, str, bool]:
+    """Pull cos_engines + name + description from livery.toml.
 
-    Returns (engine_ids, name, description).
+    Returns (engine_ids, name, description, is_legacy).
+
+    `is_legacy` is True when livery.toml has no `cos_engines` field — these
+    workspaces predate v0.5.0 and need a one-time migration. For them we
+    return ALL_SUPPORTED_ENGINES so upgrade-workspace scaffolds files for
+    every engine the framework currently supports ("full benefits"), and
+    the caller writes `cos_engines` back to livery.toml so the migration
+    is one-time.
     """
     toml_path = root / "livery.toml"
     name = root.name
     description = ""
     engines: list[str] = []
+    is_legacy = True
 
     if toml_path.is_file():
         raw = tomllib.loads(toml_path.read_text())
@@ -91,20 +106,55 @@ def _read_workspace_meta(root: Path) -> tuple[list[str], str, str]:
         raw_engines = raw.get("cos_engines")
         if isinstance(raw_engines, list) and raw_engines:
             engines = resolve_engines([str(e) for e in raw_engines])
+            is_legacy = False
 
-    if engines:
-        return engines, name, description
+    if not engines:
+        engines = list(ALL_SUPPORTED_ENGINES)
 
-    # Fallback: detect from existing files. Used for legacy workspaces
-    # whose livery.toml predates the cos_engines field.
-    detected: list[str] = []
-    if (root / "CLAUDE.md").exists() or (root / ".claude").is_dir():
-        detected.append("claude_code")
-    if (root / "AGENTS.md").exists() or (root / ".agents").is_dir():
-        detected.append("codex")
-    if not detected:
-        detected = ["claude_code"]
-    return detected, name, description
+    return engines, name, description, is_legacy
+
+
+def _plan_toml_migration(toml_path: Path, engines: list[str]) -> PlanItem:
+    """Append `cos_engines = [...]` to a legacy livery.toml.
+
+    TOML quirk: top-level keys must come *before* any [section] tables.
+    livery-im-style configs already have a [telegram] table, so simple
+    append-to-end would put the new key inside that table. We insert
+    before the first `[section]` line if one exists, else append at end.
+    """
+    body = toml_path.read_text()
+    lines = body.splitlines(keepends=True)
+
+    insert_at = len(lines)
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+        # Match a top-level table header. `[[array]]` headers count too.
+        if stripped.startswith("[") and not stripped.startswith("[["):
+            insert_at = i
+            break
+        if stripped.startswith("[["):
+            insert_at = i
+            break
+
+    quoted = ", ".join(f'"{e}"' for e in engines)
+    new_lines = [
+        "\n",
+        "# Added by `livery upgrade-workspace` migrating a legacy workspace.\n"
+        "# Edit this list to control which CoS engines this workspace targets.\n"
+        "# Removing an engine here means subsequent `upgrade-workspace` runs\n"
+        "# stop scaffolding files for it (existing files are not deleted).\n",
+        f"cos_engines = [{quoted}]\n",
+        "\n",
+    ]
+
+    new_body = "".join(lines[:insert_at] + new_lines + lines[insert_at:])
+
+    return PlanItem(
+        path=toml_path,
+        action=Action.MIGRATE,
+        reason=f"legacy workspace — migrating to declare cos_engines = [{quoted}]",
+        new_content=new_body,
+    )
 
 
 def _plan_convention_file(
@@ -176,8 +226,14 @@ def _plan_skill_file(path: Path, content: str) -> PlanItem:
 
 def compute_plan(root: Path) -> UpgradePlan:
     """Build the full upgrade plan for `root`. Pure: no file writes."""
-    engine_ids, name, description = _read_workspace_meta(root)
+    engine_ids, name, description, is_legacy = _read_workspace_meta(root)
     items: list[PlanItem] = []
+
+    # Legacy workspace: gets a one-time migration to declare cos_engines.
+    # We list this first so dry-run output makes the migration obvious.
+    toml_path = root / "livery.toml"
+    if is_legacy and toml_path.is_file():
+        items.append(_plan_toml_migration(toml_path, engine_ids))
 
     for filename in convention_files_for(engine_ids):
         items.append(_plan_convention_file(

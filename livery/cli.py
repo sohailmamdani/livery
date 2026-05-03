@@ -826,6 +826,7 @@ def upgrade_workspace(
         Action.CREATE: "create",
         Action.REFRESH: "refresh",
         Action.INSERT: "insert",
+        Action.MIGRATE: "migrate",
         Action.WARN: "warn  ",
     }
     for item in plan.items:
