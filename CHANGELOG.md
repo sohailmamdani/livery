@@ -4,6 +4,11 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+In progress: **attempt-backed dispatch lifecycle** release. Plan signed by Claude + Codex via walkie-talkie protocol; see `walkie-talkie.md`. Four-commit release; this is commit 1 of 4.
+
+### Added
+- `livery/paths_safety.py` — `sanitize_path_component` and `assert_path_contained` helpers for generated worktree paths. Defends against ticket-id and agent-id values containing path-traversal characters (`..`, `/`, control chars, etc.). `ensure_worktree` now sanitizes its inputs and verifies the resulting path lives strictly under `repo.parent` before invoking `git worktree add`. No behavior change for normal inputs; adversarial inputs are normalized or rejected.
+
 ## 0.8.5 — 2026-05-02
 
 ### Fixed

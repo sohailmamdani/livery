@@ -9,6 +9,8 @@ from pathlib import Path
 
 import frontmatter
 
+from .paths_safety import assert_path_contained, sanitize_path_component
+
 
 @dataclass(slots=True)
 class DispatchPrep:
@@ -155,14 +157,31 @@ def ensure_worktree(*, repo: Path, ticket_id: str, agent_id: str | None = None) 
     When `agent_id` is provided, the worktree path and branch include it, so
     two agents dispatched on the same ticket into the same repo get separate
     worktrees instead of colliding.
+
+    The ticket id and agent id are user-controlled, so both are run through
+    `paths_safety.sanitize_path_component` before being used to build the
+    worktree directory name. The resulting path is then verified to live
+    strictly under `repo.parent` (where sibling worktrees belong) before
+    `git worktree add` ever runs.
     """
-    short_suffix = ticket_id.split("-")[-1] or ticket_id[-6:]
+    raw_suffix = ticket_id.split("-")[-1] or ticket_id[-6:]
+    short_suffix = sanitize_path_component(raw_suffix, fallback="t")
+
     if agent_id:
+        safe_agent = sanitize_path_component(agent_id, fallback="agent")
         branch = f"ticket-{ticket_id}-{agent_id}"
-        worktree_path = repo.parent / f"{repo.name}-{agent_id}-t{short_suffix}"
+        worktree_name = f"{repo.name}-{safe_agent}-t{short_suffix}"
     else:
         branch = f"ticket-{ticket_id}"
-        worktree_path = repo.parent / f"{repo.name}-t{short_suffix}"
+        worktree_name = f"{repo.name}-t{short_suffix}"
+
+    worktree_path = repo.parent / worktree_name
+
+    # Defence in depth: even though `worktree_name` is built from sanitized
+    # components, verify the final path lives strictly under `repo.parent`.
+    # Catches symlink shenanigans and any future edits that drop the
+    # sanitizer call. Raises PathContainmentError on escape.
+    assert_path_contained(worktree_path, repo.parent)
 
     if worktree_path.exists():
         return worktree_path, branch
