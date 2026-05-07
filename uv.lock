@@ -43,7 +43,7 @@ wheels = [
 
 [[package]]
 name = "livery"
-version = "0.8.5"
+version = "0.8.6"
 source = { editable = "." }
 dependencies = [
     { name = "python-frontmatter" },
