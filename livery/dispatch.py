@@ -9,6 +9,14 @@ from pathlib import Path
 
 import frontmatter
 
+from .attempts import (
+    SCHEMA_VERSION,
+    AttemptStatus,
+    DispatchAttempt,
+    attempt_id_for,
+    now_iso,
+    write_attempt,
+)
 from .paths_safety import assert_path_contained, sanitize_path_component
 
 
@@ -22,6 +30,11 @@ class DispatchPrep:
     prompt_path: Path
     output_path: Path
     command: str
+    attempt_id: str | None = None
+    """ID of the DispatchAttempt JSON record written for this prep, or None
+    if no attempt was written (e.g. caller passed `record_attempt=False`)."""
+    attempt_path: Path | None = None
+    """Path to the attempt JSON file, if one was written."""
 
 
 PROMPT_PREAMBLE = "You are acting as the \"{assignee}\" agent in Livery. Below is your AGENTS.md (system prompt / job description) followed by the ticket you are working."
@@ -232,6 +245,7 @@ def prepare_dispatch(
         raise ValueError(f"Agent '{assignee}' has no cwd in agent.md")
 
     actual_cwd = str(cwd)
+    worktree_path: Path | None = None
     if make_worktree:
         # Always include agent_id in the worktree so fan-out into the same
         # repo produces separate checkouts. Single-agent dispatches get a
@@ -266,6 +280,37 @@ def prepare_dispatch(
         output_path=output_path,
     )
 
+    # Write the attempt record. This is the durable metadata the rest of
+    # the framework uses to find this dispatch later (`dispatch status`,
+    # `dispatch continue`, mid-flight cancellation). Attempt is created
+    # in PREPARED state; subprocess lifecycle (RUNNING / SUCCEEDED / FAILED)
+    # is updated by the caller in `--run` mode.
+    attempt = DispatchAttempt(
+        schema_version=SCHEMA_VERSION,
+        attempt_id=attempt_id_for(ticket_id, str(assignee)),
+        ticket_id=ticket_id,
+        assignee=str(assignee),
+        runtime=runtime,
+        model=str(model) if model else None,
+        workspace_root=str(root),
+        agent_cwd=str(cwd),
+        worktree_path=str(worktree_path) if worktree_path else None,
+        prompt_path=str(prompt_path),
+        output_path=str(output_path),
+        command=command,
+        pid=None,
+        started_at=now_iso(),
+        finished_at=None,
+        exit_code=None,
+        status=AttemptStatus.PREPARED,
+        failure_class=None,
+        failure_detail=None,
+        summary_excerpt=[],
+        hooks={},
+        hook_warnings=[],
+    )
+    attempt_path = write_attempt(attempt, root)
+
     return DispatchPrep(
         ticket_id=ticket_id,
         assignee=str(assignee),
@@ -275,6 +320,8 @@ def prepare_dispatch(
         prompt_path=prompt_path,
         output_path=output_path,
         command=command,
+        attempt_id=attempt.attempt_id,
+        attempt_path=attempt_path,
     )
 
 

@@ -379,12 +379,35 @@ def dispatch_fan_out(
         typer.echo("Or re-run with --run to launch them now.")
         return
 
-    # --run mode: launch all via Popen, wait for completion.
+    # --run mode: launch all via Popen, wait for completion. Update each
+    # attempt record as the subprocess transitions states (RUNNING when
+    # launched, SUCCEEDED/FAILED on exit) so `dispatch status` and future
+    # cancellation logic can find live PIDs without re-scanning.
+    from .attempts import (
+        AttemptStatus,
+        FailureClass,
+        load_attempt,
+        mark_finished,
+        mark_running,
+    )
+
     procs: dict[str, subprocess.Popen] = {}
+    prep_by_assignee: dict[str, object] = {}
     for prep in preps:
         p = subprocess.Popen(prep.command, shell=True)  # noqa: S602 — command comes from build_runtime_command
         procs[prep.assignee] = p
+        prep_by_assignee[prep.assignee] = prep
         typer.echo(f"  [launched] {prep.assignee} (pid={p.pid})")
+
+        # Mark the attempt RUNNING with this PID. Best-effort; failures
+        # here shouldn't kill the dispatch.
+        if prep.attempt_path:
+            try:
+                attempt = load_attempt(prep.attempt_path)
+                mark_running(attempt, pid=p.pid, workspace_root=root)
+            except Exception as e:
+                typer.echo(f"  (warn) couldn't update attempt for {prep.assignee}: {e}", err=True)
+
     typer.echo()
     typer.echo("Waiting for completion (Ctrl+C aborts all)...")
 
@@ -397,8 +420,16 @@ def dispatch_fan_out(
             for name in done:
                 p = remaining.pop(name)
                 elapsed = int(time.time() - start)
-                status = "ok" if p.returncode == 0 else f"exit={p.returncode}"
-                typer.echo(f"  [done] {name} ({status}, {elapsed}s)")
+                status_label = "ok" if p.returncode == 0 else f"exit={p.returncode}"
+                typer.echo(f"  [done] {name} ({status_label}, {elapsed}s)")
+
+                prep = prep_by_assignee.get(name)
+                if prep is not None and getattr(prep, "attempt_path", None):
+                    try:
+                        attempt = load_attempt(prep.attempt_path)
+                        mark_finished(attempt, exit_code=p.returncode or 0, workspace_root=root)
+                    except Exception as e:
+                        typer.echo(f"  (warn) couldn't finalize attempt for {name}: {e}", err=True)
     except KeyboardInterrupt:
         typer.echo("Aborting — terminating subprocesses...", err=True)
         for p in remaining.values():
@@ -408,6 +439,21 @@ def dispatch_fan_out(
                 p.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 p.kill()
+        # Mark the killed attempts as cancelled so dispatch status doesn't
+        # show them as still running forever.
+        for name, p in remaining.items():
+            prep = prep_by_assignee.get(name)
+            if prep is not None and getattr(prep, "attempt_path", None):
+                try:
+                    attempt = load_attempt(prep.attempt_path)
+                    attempt.status = AttemptStatus.CANCELLED
+                    attempt.failure_class = FailureClass.RUNTIME_ERROR
+                    attempt.failure_detail = "operator aborted with Ctrl+C"
+                    from .attempts import write_attempt as _wa, now_iso as _now
+                    attempt.finished_at = _now()
+                    _wa(attempt, root)
+                except Exception:
+                    pass
         raise typer.Exit(130)
 
     any_failed = any(p.returncode != 0 for p in procs.values())
