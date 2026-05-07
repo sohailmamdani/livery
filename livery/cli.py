@@ -473,22 +473,32 @@ def dispatch_status(
         help="Only show dispatches whose output file was written in the last N minutes.",
     ),
 ) -> None:
-    """Roll-up of every dispatch artifact in <output_dir>.
+    """Roll-up of every dispatch the framework can see.
 
-    Shows whether each dispatch finished (its output contains a
-    `=== DISPATCH_SUMMARY ===` block), is still active (recent file
-    activity, no summary yet), or went stale (file hasn't moved in a
-    while and never produced a summary — usually a crash).
+    Reads the durable attempt records under `<workspace>/.livery/dispatch/
+    attempts/` first (canonical metadata: status, pid, failure class, etc.)
+    and falls back to `/tmp` output-file scanning for legacy or manually-
+    launched dispatches with no attempt record.
     """
     import sys
 
-    views = list_dispatches(output_dir)
+    from .attempts import AttemptStatus
+
+    # Find the workspace root if the user is inside one. attempts-aware
+    # listing needs it; otherwise we fall back to /tmp-only scanning.
+    try:
+        workspace_root = find_root()
+    except RuntimeError:
+        workspace_root = None
+
+    views = list_dispatches(output_dir, workspace_root=workspace_root)
     if since_minutes is not None:
         cutoff = since_minutes * 60
         views = [v for v in views if v.age_seconds <= cutoff]
 
     if not views:
-        typer.echo(f"No dispatch artifacts in {output_dir}.")
+        where = "attempts dir or " if workspace_root else ""
+        typer.echo(f"No dispatch artifacts in {where}{output_dir}.")
         return
 
     use_color = sys.stdout.isatty()
@@ -496,21 +506,59 @@ def dispatch_status(
     def c(text: str, code: str) -> str:
         return f"\033[{code}m{text}\033[0m" if use_color else text
 
-    GREEN, YELLOW, RED, DIM, BOLD = "32", "33", "31", "2", "1"
-    icon_for = {
-        DispatchState.DONE: (c("✓", GREEN), GREEN),
-        DispatchState.ACTIVE: (c("●", YELLOW), YELLOW),
-        DispatchState.STALE: (c("✗", RED), RED),
+    GREEN, YELLOW, RED, DIM, BOLD, MAGENTA = "32", "33", "31", "2", "1", "35"
+
+    # Color/icon by AttemptStatus when we have one; fall back to legacy
+    # DispatchState otherwise.
+    status_render = {
+        AttemptStatus.SUCCEEDED: (c("✓", GREEN), GREEN, "succeeded"),
+        AttemptStatus.FAILED: (c("✗", RED), RED, "failed"),
+        AttemptStatus.RUNNING: (c("●", YELLOW), YELLOW, "running"),
+        AttemptStatus.PREPARED: (c("○", DIM), DIM, "prepared"),
+        AttemptStatus.STALE: (c("⚠", RED), RED, "stale"),
+        AttemptStatus.BLOCKED: (c("⏸", MAGENTA), MAGENTA, "blocked"),
+        AttemptStatus.CANCELLED: (c("⊘", DIM), DIM, "cancelled"),
+        AttemptStatus.UNKNOWN: (c("?", DIM), DIM, "unknown"),
+    }
+    legacy_render = {
+        DispatchState.DONE: (c("✓", GREEN), GREEN, "done"),
+        DispatchState.ACTIVE: (c("●", YELLOW), YELLOW, "active"),
+        DispatchState.STALE: (c("✗", RED), RED, "stale"),
     }
 
-    typer.echo(c(f"Dispatch artifacts in {output_dir}:", BOLD))
+    typer.echo(c("Dispatch artifacts:", BOLD))
+    if workspace_root:
+        typer.echo(c(f"  workspace: {workspace_root}", DIM))
+    typer.echo(c(f"  /tmp scan: {output_dir}", DIM))
     typer.echo()
 
     for v in views:
-        icon, color = icon_for[v.state]
+        # Pick the richest status we have. attempt-backed → use
+        # inferred_status (for prepared records with output) or the
+        # attempt's own status. Legacy /tmp-only → use DispatchState.
+        if v.attempt is not None:
+            displayed_status = v.inferred_status or v.attempt.status
+            icon, color, label = status_render.get(
+                displayed_status, status_render[AttemptStatus.UNKNOWN]
+            )
+            extra = ""
+            if v.attempt.failure_class:
+                extra = f" / {v.attempt.failure_class.value}"
+        else:
+            icon, color, label = legacy_render[v.state]
+            extra = " / no-attempt-record"
+
         age = humanize_age(v.age_seconds)
-        typer.echo(f"  {icon} {v.label}  {c(f'[{v.state.value}, {age} ago]', color)}")
-        if v.state == DispatchState.DONE and v.summary_excerpt:
+        typer.echo(f"  {icon} {v.label}  {c(f'[{label}{extra}, {age} ago]', color)}")
+
+        # Show summary excerpt for done dispatches; last line otherwise.
+        is_terminal = v.attempt and v.attempt.status in (
+            AttemptStatus.SUCCEEDED, AttemptStatus.FAILED, AttemptStatus.BLOCKED, AttemptStatus.CANCELLED,
+        )
+        is_terminal = is_terminal or (v.attempt is None and v.state == DispatchState.DONE)
+        is_inferred_done = v.inferred_status == AttemptStatus.SUCCEEDED
+
+        if (is_terminal or is_inferred_done) and v.summary_excerpt:
             for line in v.summary_excerpt[:3]:
                 typer.echo(c(f"      {line}", DIM))
         elif v.last_line:
@@ -545,9 +593,22 @@ def dispatch_tail(
     import subprocess
 
     try:
-        view = find_dispatch(query, output_dir)
+        ws_root = find_root()
+    except RuntimeError:
+        ws_root = None
+    try:
+        view = find_dispatch(query, output_dir, workspace_root=ws_root)
     except ValueError as e:
         typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    if view.path is None:
+        typer.echo(
+            f"Dispatch {view.label} has no output file yet (status: "
+            f"{view.attempt.status.value if view.attempt else 'unknown'}). "
+            "Nothing to tail.",
+            err=True,
+        )
         raise typer.Exit(1)
 
     typer.echo(f"# {view.path}\n", err=True)

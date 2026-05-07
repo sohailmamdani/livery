@@ -144,3 +144,230 @@ def test_list_dispatches_ignores_non_dispatch_files(tmp_path):
     views = list_dispatches(tmp_path)
     assert len(views) == 1
     assert views[0].label == "real-a"
+
+
+# -----------------------------------------------------------------------------
+# Attempt-backed views + the three compatibility rules from the signed plan
+# -----------------------------------------------------------------------------
+
+
+def _make_workspace(tmp_path: Path, with_livery_toml: bool = True) -> Path:
+    root = tmp_path / "ws"
+    root.mkdir()
+    if with_livery_toml:
+        (root / "livery.toml").write_text('name = "ws"\n')
+    return root
+
+
+def _stub_attempt_for(workspace_root: Path, *, ticket_id: str, assignee: str, output_path: Path):
+    """Helper: write an attempt JSON at the canonical location, return it."""
+    from livery.attempts import (
+        SCHEMA_VERSION,
+        AttemptStatus,
+        DispatchAttempt,
+        attempt_id_for,
+        now_iso,
+        write_attempt,
+    )
+    attempt = DispatchAttempt(
+        schema_version=SCHEMA_VERSION,
+        attempt_id=attempt_id_for(ticket_id, assignee),
+        ticket_id=ticket_id,
+        assignee=assignee,
+        runtime="codex",
+        model="gpt-5-codex",
+        workspace_root=str(workspace_root),
+        agent_cwd="/tmp/repo",
+        worktree_path=None,
+        prompt_path=str(output_path).replace(".out", ".txt"),
+        output_path=str(output_path),
+        command="codex exec ...",
+        pid=None,
+        started_at=now_iso(),
+        finished_at=None,
+        exit_code=None,
+        status=AttemptStatus.PREPARED,
+        failure_class=None,
+        failure_detail=None,
+        summary_excerpt=[],
+        hooks={},
+        hook_warnings=[],
+    )
+    write_attempt(attempt, workspace_root)
+    return attempt
+
+
+def test_compat_rule_new_dispatches_attempt_json_canonical(tmp_path):
+    """Compatibility rule 1: new dispatches → attempt JSON canonical."""
+    from livery.attempts import AttemptStatus
+
+    workspace = _make_workspace(tmp_path)
+    output_dir = tmp_path / "tmp"
+    output_dir.mkdir()
+    out_path = output_dir / "livery-dispatch-2026-05-07-001-x-research.out"
+
+    attempt = _stub_attempt_for(
+        workspace,
+        ticket_id="2026-05-07-001-x",
+        assignee="research",
+        output_path=out_path,
+    )
+    # No /tmp output file written yet — this is a freshly-prepped attempt.
+
+    views = list_dispatches(output_dir, workspace_root=workspace)
+    assert len(views) == 1
+    v = views[0]
+    # Attempt-backed view: has attempt metadata, label from attempt
+    assert v.attempt is not None
+    assert v.attempt.attempt_id == attempt.attempt_id
+    assert v.label == "2026-05-07-001-x-research"
+    assert v.attempt.status == AttemptStatus.PREPARED
+
+
+def test_compat_rule_old_dispatches_output_scanning_only(tmp_path):
+    """Compatibility rule 2: old / manually-launched (no attempt) → output scanning."""
+    workspace = _make_workspace(tmp_path)
+    output_dir = tmp_path / "tmp"
+    output_dir.mkdir()
+    # Manually-launched dispatch — only output file, no attempt JSON
+    out_path = output_dir / "livery-dispatch-legacy-001-old-agent.out"
+    out_path.write_text("some output\n")
+
+    views = list_dispatches(output_dir, workspace_root=workspace)
+    assert len(views) == 1
+    v = views[0]
+    # No attempt → fall back to legacy state-from-file
+    assert v.attempt is None
+    assert v.label == "legacy-001-old-agent"
+
+
+def test_compat_rule_both_exist_attempt_wins(tmp_path):
+    """Compatibility rule 3: both attempt and /tmp output exist for same label →
+    attempt wins; output tail fills missing summary/last-line."""
+    workspace = _make_workspace(tmp_path)
+    output_dir = tmp_path / "tmp"
+    output_dir.mkdir()
+    out_path = output_dir / "livery-dispatch-2026-05-07-001-x-research.out"
+
+    # Both: attempt record AND output file
+    _stub_attempt_for(
+        workspace,
+        ticket_id="2026-05-07-001-x",
+        assignee="research",
+        output_path=out_path,
+    )
+    out_path.write_text(
+        "working...\n"
+        "=== DISPATCH_SUMMARY ===\n"
+        "Status: done\n"
+        "Summary: did the thing\n"
+        "=== END DISPATCH_SUMMARY ===\n"
+    )
+
+    views = list_dispatches(output_dir, workspace_root=workspace)
+
+    # Only ONE view for this label — attempt wins, /tmp gets deduplicated.
+    matching = [v for v in views if v.label == "2026-05-07-001-x-research"]
+    assert len(matching) == 1
+    v = matching[0]
+    # Attempt is the source
+    assert v.attempt is not None
+    # But the output tail filled in the summary excerpt
+    assert any("Status: done" in line for line in v.summary_excerpt)
+
+
+def test_inference_prepared_with_summary_displays_succeeded(tmp_path):
+    """Read-time inference: PREPARED + DISPATCH_SUMMARY in output → display SUCCEEDED."""
+    from livery.attempts import AttemptStatus
+
+    workspace = _make_workspace(tmp_path)
+    output_dir = tmp_path / "tmp"
+    output_dir.mkdir()
+    out_path = output_dir / "livery-dispatch-2026-05-07-001-x-research.out"
+
+    _stub_attempt_for(
+        workspace,
+        ticket_id="2026-05-07-001-x",
+        assignee="research",
+        output_path=out_path,
+    )
+    out_path.write_text(
+        "=== DISPATCH_SUMMARY ===\nStatus: done\n=== END DISPATCH_SUMMARY ===\n"
+    )
+
+    views = list_dispatches(output_dir, workspace_root=workspace)
+    v = views[0]
+    # Stored status remains PREPARED (we never write back at status time)
+    assert v.attempt.status == AttemptStatus.PREPARED
+    # But inferred_status is SUCCEEDED for display
+    assert v.inferred_status == AttemptStatus.SUCCEEDED
+
+
+def test_inference_prepared_no_output_stays_prepared(tmp_path):
+    """Read-time inference: PREPARED + no output file → display PREPARED (waiting on user)."""
+    from livery.attempts import AttemptStatus
+
+    workspace = _make_workspace(tmp_path)
+    output_dir = tmp_path / "tmp"
+    output_dir.mkdir()
+    out_path = output_dir / "livery-dispatch-2026-05-07-001-x-research.out"
+    # Note: no out_path.write_text — output file doesn't exist
+
+    _stub_attempt_for(
+        workspace,
+        ticket_id="2026-05-07-001-x",
+        assignee="research",
+        output_path=out_path,
+    )
+
+    views = list_dispatches(output_dir, workspace_root=workspace)
+    v = views[0]
+    # Inference returns PREPARED (no output to base SUCCEEDED on)
+    assert v.inferred_status == AttemptStatus.PREPARED
+
+
+def test_inference_only_fires_for_prepared_status(tmp_path):
+    """Read-time inference: a SUCCEEDED attempt is not re-inferred (status sticks)."""
+    from livery.attempts import (
+        AttemptStatus,
+        attempt_id_for,
+        attempts_dir,
+        load_attempt,
+        write_attempt,
+    )
+
+    workspace = _make_workspace(tmp_path)
+    output_dir = tmp_path / "tmp"
+    output_dir.mkdir()
+    out_path = output_dir / "livery-dispatch-2026-05-07-001-x-research.out"
+
+    attempt = _stub_attempt_for(
+        workspace,
+        ticket_id="2026-05-07-001-x",
+        assignee="research",
+        output_path=out_path,
+    )
+    # Simulate a finished dispatch — status is SUCCEEDED, not PREPARED
+    attempt.status = AttemptStatus.SUCCEEDED
+    write_attempt(attempt, workspace)
+
+    out_path.write_text(
+        "=== DISPATCH_SUMMARY ===\nStatus: done\n=== END DISPATCH_SUMMARY ===\n"
+    )
+
+    views = list_dispatches(output_dir, workspace_root=workspace)
+    v = views[0]
+    # No inference because status was already SUCCEEDED (not PREPARED)
+    assert v.attempt.status == AttemptStatus.SUCCEEDED
+    assert v.inferred_status is None
+
+
+def test_list_dispatches_no_workspace_falls_back_to_tmp_only(tmp_path):
+    """workspace_root=None → only /tmp scan, no attempts read. Old behavior."""
+    output_dir = tmp_path / "tmp"
+    output_dir.mkdir()
+    (output_dir / "livery-dispatch-foo-bar.out").write_text("hi\n")
+
+    views = list_dispatches(output_dir, workspace_root=None)
+    assert len(views) == 1
+    assert views[0].attempt is None
