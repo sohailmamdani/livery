@@ -478,3 +478,158 @@ def test_prepare_dispatch_rejects_unknown_agent(tmp_path):
             make_worktree=False,
         )
     assert "ghost-agent" in str(ei.value)
+
+
+# -----------------------------------------------------------------------------
+# Hook integration with prepare_dispatch
+# -----------------------------------------------------------------------------
+
+
+def test_after_worktree_create_hook_fires_when_configured(tmp_path, monkeypatch):
+    """When [dispatch_hooks].after_worktree_create is configured AND a
+    worktree is made, the hook runs and its outcome is recorded in the
+    attempt JSON."""
+    from livery.attempts import attempts_dir, list_attempts, AttemptStatus
+    from livery.dispatch import ensure_worktree as real_ensure_worktree
+    import livery.dispatch as dispatch_mod
+
+    agent_cwd = tmp_path / "branddb"
+    agent_cwd.mkdir()
+    root = _make_livery_root(tmp_path, agent_cwd)
+
+    # Workspace marker so config.load() picks up the hook table.
+    (root / "livery.toml").write_text(
+        '[dispatch_hooks]\n'
+        'after_worktree_create = "echo HOOK_FIRED_FOR=$LIVERY_ASSIGNEE"\n'
+    )
+
+    # Stub ensure_worktree — the real one needs a git repo. Return a path
+    # that exists so the rest of prepare_dispatch is happy.
+    fake_wt = tmp_path / "branddb-tx"
+    fake_wt.mkdir()
+    monkeypatch.setattr(
+        dispatch_mod,
+        "ensure_worktree",
+        lambda *, repo, ticket_id, agent_id=None: (fake_wt, "ticket-x"),
+    )
+
+    ticket_id = "2026-05-07-099-hook-test"
+    ticket_post = frontmatter.Post(
+        "## Description\n\nHook test.\n",
+        id=ticket_id,
+        title="Hook test",
+        assignee="lead-dev",
+        status="open",
+        created="2026-05-07T00:00:00Z",
+        updated="2026-05-07T00:00:00Z",
+    )
+    ticket_path = root / "tickets" / f"{ticket_id}.md"
+    ticket_path.write_text(frontmatter.dumps(ticket_post) + "\n")
+
+    prep = prepare_dispatch(
+        root=root,
+        ticket_path=ticket_path,
+        output_dir=tmp_path / "dispatch-out",
+        make_worktree=True,
+    )
+
+    attempts = list_attempts(root)
+    assert len(attempts) == 1
+    attempt = attempts[0]
+    assert "after_worktree_create" in attempt.hooks
+    assert attempt.hooks["after_worktree_create"].exit_code == 0
+    assert attempt.status == AttemptStatus.PREPARED  # success → unchanged
+    log = Path(attempt.hooks["after_worktree_create"].log_path).read_text()
+    assert "HOOK_FIRED_FOR=lead-dev" in log
+
+
+def test_after_worktree_create_hook_failure_aborts_prepare(tmp_path, monkeypatch):
+    """A non-zero exit from the after_worktree_create hook marks the
+    attempt FAILED with hook_error AND raises so callers don't proceed."""
+    from livery.attempts import attempts_dir, list_attempts, AttemptStatus, FailureClass
+    import livery.dispatch as dispatch_mod
+
+    agent_cwd = tmp_path / "branddb"
+    agent_cwd.mkdir()
+    root = _make_livery_root(tmp_path, agent_cwd)
+
+    (root / "livery.toml").write_text(
+        '[dispatch_hooks]\n'
+        'after_worktree_create = "exit 9"\n'
+    )
+
+    fake_wt = tmp_path / "branddb-tx"
+    fake_wt.mkdir()
+    monkeypatch.setattr(
+        dispatch_mod,
+        "ensure_worktree",
+        lambda *, repo, ticket_id, agent_id=None: (fake_wt, "ticket-x"),
+    )
+
+    ticket_id = "2026-05-07-100-hook-fail"
+    ticket_post = frontmatter.Post(
+        "## Description\n\nHook fail test.\n",
+        id=ticket_id,
+        title="Hook fail",
+        assignee="lead-dev",
+        status="open",
+        created="2026-05-07T00:00:00Z",
+        updated="2026-05-07T00:00:00Z",
+    )
+    ticket_path = root / "tickets" / f"{ticket_id}.md"
+    ticket_path.write_text(frontmatter.dumps(ticket_post) + "\n")
+
+    with pytest.raises(RuntimeError) as ei:
+        prepare_dispatch(
+            root=root,
+            ticket_path=ticket_path,
+            output_dir=tmp_path / "dispatch-out",
+            make_worktree=True,
+        )
+    assert "after_worktree_create" in str(ei.value)
+
+    # And the attempt was persisted with failure metadata
+    attempts = list_attempts(root)
+    assert len(attempts) == 1
+    attempt = attempts[0]
+    assert attempt.status == AttemptStatus.FAILED
+    assert attempt.failure_class == FailureClass.HOOK_ERROR
+    assert "after_worktree_create" in (attempt.failure_detail or "")
+
+
+def test_after_worktree_create_hook_skipped_without_worktree(tmp_path):
+    """No worktree → no after_worktree_create hook firing, even if configured."""
+    from livery.attempts import list_attempts
+
+    agent_cwd = tmp_path / "branddb"
+    agent_cwd.mkdir()
+    root = _make_livery_root(tmp_path, agent_cwd)
+
+    (root / "livery.toml").write_text(
+        '[dispatch_hooks]\n'
+        'after_worktree_create = "exit 1"\n'  # would fail if it ran
+    )
+
+    ticket_id = "2026-05-07-101-no-wt"
+    ticket_post = frontmatter.Post(
+        "## Description\n\nNo worktree.\n",
+        id=ticket_id,
+        title="No wt",
+        assignee="lead-dev",
+        status="open",
+        created="2026-05-07T00:00:00Z",
+        updated="2026-05-07T00:00:00Z",
+    )
+    ticket_path = root / "tickets" / f"{ticket_id}.md"
+    ticket_path.write_text(frontmatter.dumps(ticket_post) + "\n")
+
+    # Should NOT raise — hook isn't fired without a worktree
+    prepare_dispatch(
+        root=root,
+        ticket_path=ticket_path,
+        output_dir=tmp_path / "dispatch-out",
+        make_worktree=False,
+    )
+
+    attempts = list_attempts(root)
+    assert "after_worktree_create" not in attempts[0].hooks

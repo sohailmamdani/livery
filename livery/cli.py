@@ -390,10 +390,44 @@ def dispatch_fan_out(
         mark_finished,
         mark_running,
     )
+    from .config import load as _load_cfg
+    from .dispatch_hooks import get_hook_command, run_post_run_hook, run_pre_run_hook
+
+    cfg = _load_cfg(root)
+    before_run_cmd = get_hook_command(cfg.raw, "before_run")
+    after_run_cmd = get_hook_command(cfg.raw, "after_run")
 
     procs: dict[str, subprocess.Popen] = {}
     prep_by_assignee: dict[str, object] = {}
+    skipped_by_hook: set[str] = set()
     for prep in preps:
+        # Pre-run hook. Blocking on failure: the attempt is marked FAILED
+        # with hook_error, and we don't launch the runtime for this prep.
+        if before_run_cmd and prep.attempt_path:
+            try:
+                attempt = load_attempt(prep.attempt_path)
+                _, ok = run_pre_run_hook(
+                    hook_name="before_run",
+                    command=before_run_cmd,
+                    attempt=attempt,
+                    workspace_root=root,
+                )
+                if not ok:
+                    typer.echo(
+                        f"  [skipped] {prep.assignee} (before_run hook failed; "
+                        f"see {attempt.hooks['before_run'].log_path})",
+                        err=True,
+                    )
+                    skipped_by_hook.add(prep.assignee)
+                    continue
+            except Exception as e:
+                typer.echo(f"  (warn) before_run hook errored for {prep.assignee}: {e}", err=True)
+                # Conservative: treat unexpected errors in the hook
+                # mechanism itself as blocking too — better to surface
+                # than to silently launch.
+                skipped_by_hook.add(prep.assignee)
+                continue
+
         p = subprocess.Popen(prep.command, shell=True)  # noqa: S602 — command comes from build_runtime_command
         procs[prep.assignee] = p
         prep_by_assignee[prep.assignee] = prep
@@ -430,6 +464,26 @@ def dispatch_fan_out(
                         mark_finished(attempt, exit_code=p.returncode or 0, workspace_root=root)
                     except Exception as e:
                         typer.echo(f"  (warn) couldn't finalize attempt for {name}: {e}", err=True)
+
+                # Post-run hook (advisory — non-zero exit recorded as a
+                # warning, doesn't change the attempt's primary status).
+                if after_run_cmd and prep is not None and getattr(prep, "attempt_path", None):
+                    try:
+                        attempt = load_attempt(prep.attempt_path)
+                        outcome = run_post_run_hook(
+                            command=after_run_cmd,
+                            attempt=attempt,
+                            workspace_root=root,
+                            exit_code=p.returncode or 0,
+                        )
+                        if outcome.exit_code != 0:
+                            typer.echo(
+                                f"  (warn) after_run hook for {name} exited "
+                                f"{outcome.exit_code}; see {outcome.log_path}",
+                                err=True,
+                            )
+                    except Exception as e:
+                        typer.echo(f"  (warn) after_run hook errored for {name}: {e}", err=True)
     except KeyboardInterrupt:
         typer.echo("Aborting — terminating subprocesses...", err=True)
         for p in remaining.values():

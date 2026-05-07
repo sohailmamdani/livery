@@ -311,6 +311,28 @@ def prepare_dispatch(
     )
     attempt_path = write_attempt(attempt, root)
 
+    # Run the after_worktree_create hook (if configured AND we made one).
+    # Failure is blocking: the attempt is marked FAILED with hook_error,
+    # we raise so the caller doesn't proceed to launch the runtime.
+    if worktree_path is not None:
+        from .config import load as _load_cfg
+        from .dispatch_hooks import get_hook_command, run_pre_run_hook
+        cfg = _load_cfg(root)
+        hook_cmd = get_hook_command(cfg.raw, "after_worktree_create")
+        if hook_cmd:
+            _, ok = run_pre_run_hook(
+                hook_name="after_worktree_create",
+                command=hook_cmd,
+                attempt=attempt,
+                workspace_root=root,
+            )
+            if not ok:
+                raise RuntimeError(
+                    f"after_worktree_create hook failed for "
+                    f"{attempt.attempt_id}; see "
+                    f"{attempt.hooks['after_worktree_create'].log_path}"
+                )
+
     return DispatchPrep(
         ticket_id=ticket_id,
         assignee=str(assignee),
