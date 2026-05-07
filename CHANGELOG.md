@@ -9,6 +9,16 @@ In progress: **attempt-backed dispatch lifecycle** release. Plan signed by Claud
 ### Added
 - `livery/paths_safety.py` — `sanitize_path_component` and `assert_path_contained` helpers for generated worktree paths. Defends against ticket-id and agent-id values containing path-traversal characters (`..`, `/`, control chars, etc.). `ensure_worktree` now sanitizes its inputs and verifies the resulting path lives strictly under `repo.parent` before invoking `git worktree add`. No behavior change for normal inputs; adversarial inputs are normalized or rejected.
 
+### Fixed
+- `livery init` is now safe to run in a populated directory. Previously it silently overwrote `CLAUDE.md`, `AGENTS.md`, and any user-written skill/command files at Livery target paths. Now:
+  - **`CLAUDE.md` / `AGENTS.md`**: if the file exists, Livery writes the fresh template at the top and appends the user's previous content below (under a "Carried over from previous CLAUDE.md" heading). Any pre-existing `LIVERY-MANAGED` block in the old content is stripped to avoid duplication.
+  - **Skill / command files** (`.claude/skills/<name>/SKILL.md`, `.claude/commands/<name>.md`, `.agents/skills/<name>/SKILL.md`): Livery distinguishes its own files (frontmatter has `livery: managed`) from user-written ones. User-written files trigger an interactive prompt: rename to a new functional name (default), skip without installing Livery's, or overwrite. Renames are real — a skill's parent directory is renamed AND its frontmatter `name` field is updated, so the user's skill stays usable as the new name. Commands rename the file directly.
+  - In non-interactive mode, the default action for collisions is "skip" with a stderr warning.
+- `init_workspace` now returns an `InitResult` dataclass with `created` / `appended` / `skipped` / `backed_up` lists rather than a flat list of paths. `livery init` CLI output reflects all four categories so the user sees exactly what happened to each file.
+
+### Marker convention
+- Livery-shipped skill and slash-command files now include `livery: managed` in their frontmatter. This is the marker `init` (and future `upgrade-workspace` extensions) use to distinguish framework-managed files from user-written ones — same pattern as the `LIVERY-MANAGED:BEGIN`/`END` markers in convention files. Existing scaffolded files in older workspaces don't have this marker; on the next `livery init` they'd look user-written. `upgrade-workspace` retroactively refreshes them via the existing `--force` path.
+
 ## 0.8.5 — 2026-05-02
 
 ### Fixed

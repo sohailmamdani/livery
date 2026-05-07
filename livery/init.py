@@ -15,12 +15,16 @@ Safe: refuses to run if livery.toml already exists in the cwd.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Literal, Optional
+
+import frontmatter
 
 from .cos_engines import (
     COS_ENGINES,
     convention_files_for,
+    find_managed_block,
     resolve_engines,
     wrap_managed,
 )
@@ -129,6 +133,7 @@ yours — Livery's `upgrade-workspace` command will not touch this section._
 TICKET_SLASH = """---
 description: Create a new Livery ticket
 argument-hint: [title or brief description]
+livery: managed
 ---
 
 Help the user create a new Livery ticket.
@@ -148,6 +153,7 @@ Steps:
 NEW_TICKET_SKILL = """---
 name: new-ticket
 description: Create a new Livery ticket to track work or delegate to an agent. Use when the user says "create a ticket", "new ticket", "file a ticket", invokes `/ticket`, or describes a unit of work that should be formalized.
+livery: managed
 ---
 
 # Create a Livery ticket
@@ -174,6 +180,151 @@ Livery tracks work as markdown tickets in `tickets/<YYYY-MM-DD>-<NNN>-<slug>.md`
 """
 
 
+@dataclass(slots=True, frozen=True)
+class SkillCollisionResolution:
+    """Returned by the skill-collision callback to tell `init_workspace`
+    what to do with a pre-existing user-written skill/command file.
+
+    - `action = "skip"`: leave the user's file in place, do NOT install
+      Livery's version. Result: the user keeps their thing; Livery's
+      slash command / skill is not available in this workspace.
+    - `action = "overwrite"`: replace the user's file with Livery's.
+      Destructive — only use when the user explicitly asks for it.
+    - `action = "rename"`: rename the user's existing skill or command
+      to a new functional name (so it stays usable as that name), then
+      install Livery's at the original path. `new_name` is required;
+      it's the new identifier the user wants their skill/command to
+      live under.
+    """
+    action: Literal["skip", "overwrite", "rename"]
+    new_name: str | None = None
+
+    @classmethod
+    def skip(cls) -> "SkillCollisionResolution":
+        return cls(action="skip")
+
+    @classmethod
+    def overwrite(cls) -> "SkillCollisionResolution":
+        return cls(action="overwrite")
+
+    @classmethod
+    def rename(cls, new_name: str) -> "SkillCollisionResolution":
+        if not new_name:
+            raise ValueError("rename requires a non-empty new_name")
+        return cls(action="rename", new_name=new_name)
+
+
+SkillCollisionCallback = Callable[[Path], SkillCollisionResolution]
+"""Called by `init_workspace` when it finds a non-Livery-managed file at a
+skill or command target path. Receives the colliding path; returns the
+resolution. Default behavior (when callback is None) is `skip`."""
+
+
+def _is_livery_managed_skill(path: Path) -> bool:
+    """True if the markdown file at `path` has `livery: managed` in its frontmatter.
+
+    Used to distinguish Livery-shipped skill/command files (safe to overwrite
+    or no-op-replace) from user-written files at the same path (must not be
+    silently clobbered).
+    """
+    try:
+        post = frontmatter.load(path)
+    except Exception:
+        return False
+    return post.get("livery") == "managed"
+
+
+def _is_skill_path(path: Path) -> bool:
+    """A 'skill' is `<...>/skills/<skill-name>/SKILL.md`. A 'command' is
+    `<...>/commands/<command-name>.md`. Different rename semantics."""
+    return path.name == "SKILL.md" and path.parent.parent.name == "skills"
+
+
+def _rename_user_skill(skill_md_path: Path, new_name: str) -> Path:
+    """Rename a user's existing skill to `new_name` so it stays functional.
+
+    Skills live in directories: `.../skills/<name>/SKILL.md`. To rename:
+    - Rename the parent directory (`<name>` → `<new_name>`)
+    - Update the SKILL.md frontmatter `name` field to match
+
+    Returns the new SKILL.md path. Raises FileExistsError if a directory
+    at the new name already exists.
+    """
+    from .paths_safety import sanitize_path_component
+    safe_new = sanitize_path_component(new_name, fallback="renamed-skill")
+
+    skill_dir = skill_md_path.parent
+    parent_dir = skill_dir.parent  # the `.../skills/` dir
+    new_dir = parent_dir / safe_new
+
+    if new_dir.exists():
+        raise FileExistsError(
+            f"can't rename {skill_dir} to {new_dir}: target already exists"
+        )
+
+    skill_dir.rename(new_dir)
+
+    # Update the frontmatter `name` field so Claude Code / Codex see the new id.
+    new_skill_md = new_dir / "SKILL.md"
+    try:
+        post = frontmatter.load(new_skill_md)
+        post["name"] = safe_new
+        new_skill_md.write_text(frontmatter.dumps(post) + "\n")
+    except Exception:
+        # If the user's skill had unparseable frontmatter, leave it alone —
+        # the rename of the directory still gives them a working location.
+        pass
+
+    return new_skill_md
+
+
+def _rename_user_command(command_md_path: Path, new_name: str) -> Path:
+    """Rename a user's existing slash command to `new_name`.
+
+    Commands live as single files: `.../commands/<name>.md`. To rename,
+    we just move the file to `.../commands/<new_name>.md`.
+
+    Returns the new path. Raises FileExistsError on collision.
+    """
+    from .paths_safety import sanitize_path_component
+    safe_new = sanitize_path_component(new_name, fallback="renamed-command")
+
+    parent = command_md_path.parent
+    new_path = parent / f"{safe_new}.md"
+
+    if new_path.exists():
+        raise FileExistsError(
+            f"can't rename {command_md_path} to {new_path}: target already exists"
+        )
+
+    command_md_path.rename(new_path)
+    return new_path
+
+
+@dataclass(slots=True)
+class InitResult:
+    """Returned by `init_workspace`. Created replaces the old return type
+    (a list of paths) with a richer structure that callers can present to
+    users — which files were written, which were left alone, which collided."""
+
+    created: list[Path] = field(default_factory=list)
+    """Files Livery wrote (or rewrote)."""
+
+    appended: list[Path] = field(default_factory=list)
+    """Pre-existing convention files where Livery wrote a fresh template and
+    appended the old content. The user has both their old content and the
+    new framework block."""
+
+    skipped: list[tuple[Path, str]] = field(default_factory=list)
+    """Pre-existing skill/command files Livery did NOT install over.
+    Each entry is (path, reason). User-written files where the collision
+    callback returned `skip` end up here."""
+
+    backed_up: list[tuple[Path, Path]] = field(default_factory=list)
+    """User-written skill/command files that were renamed to `.bak`
+    before Livery's version was installed. Each entry is (original, backup)."""
+
+
 def init_workspace(
     target: Path,
     name: str,
@@ -183,16 +334,32 @@ def init_workspace(
     telegram_token_file: str | None = None,
     cos_engine: str | list[str] = "both",
     overwrite: bool = False,
-) -> list[Path]:
-    """Scaffold a new workspace at `target`. Returns the list of files created.
+    skill_collision_callback: SkillCollisionCallback | None = None,
+) -> InitResult:
+    """Scaffold a new workspace at `target`. Returns an `InitResult`.
 
     `cos_engine` controls which CoS engines this workspace targets. Accepts:
       - a single engine id ("claude_code", "codex", "pi", "opencode", ...)
       - "both" (back-compat alias for ["claude_code", "codex"])
       - a comma-separated string ("claude_code,pi")
       - a list of engine ids
+
+    Behavior on a populated directory:
+
+    - `livery.toml`: refuses unless `overwrite=True`. (Same as before.)
+    - `CLAUDE.md` / `AGENTS.md`: writes the fresh template and appends the
+      pre-existing file content at the bottom. Any pre-existing
+      LIVERY-MANAGED block in the old content is stripped to avoid
+      duplication. Result: managed block at top + user-editable scaffold +
+      whatever the user had before.
+    - Skill / command files (`.claude/...`, `.agents/skills/...`): if
+      Livery-managed (frontmatter has `livery: managed`), no-op replace
+      with current shipped version. If NOT Livery-managed, calls
+      `skill_collision_callback(path)`; default is `skip` and the user's
+      file is left alone. CLI wraps this with an interactive prompt.
     """
     engine_ids = resolve_engines(cos_engine)
+    callback: SkillCollisionCallback = skill_collision_callback or (lambda _p: SkillCollisionResolution.skip())
 
     target = target.resolve()
     target.mkdir(parents=True, exist_ok=True)
@@ -204,14 +371,14 @@ def init_workspace(
             "Pass overwrite=True to force."
         )
 
-    created: list[Path] = []
+    result = InitResult()
 
-    def _write(path: Path, content: str) -> None:
+    def _write_fresh(path: Path, content: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
-        created.append(path)
+        result.created.append(path)
 
-    _write(marker, _render_livery_toml(
+    _write_fresh(marker, _render_livery_toml(
         name=name,
         description=description,
         default_runtime=default_runtime,
@@ -220,34 +387,105 @@ def init_workspace(
         cos_engines=engine_ids,
     ))
 
-    # Convention files: write each unique filename once, with a
-    # framework-managed block at top (regenerable on upgrade) and a
-    # user-editable section below (never touched after init).
+    # Convention files: write fresh template; if a file already existed,
+    # append its content (minus any old managed block) at the bottom.
     user_body = COS_USER_TEMPLATE.format(
         name=name,
         description=description or "(Describe your workspace here.)",
     )
-    full_body = wrap_managed(COS_MANAGED_BLOCK) + "\n" + user_body
+    fresh_template = wrap_managed(COS_MANAGED_BLOCK) + "\n" + user_body
+
     for filename in convention_files_for(engine_ids):
-        _write(target / filename, full_body)
+        path = target / filename
+        if not path.exists():
+            _write_fresh(path, fresh_template)
+            continue
 
-    _write(target / "agents" / ".gitkeep", "")
-    _write(target / "tickets" / ".gitkeep", "")
+        # File exists — preserve its content by appending below the fresh template.
+        # Strip any pre-existing LIVERY-MANAGED block so we don't duplicate it.
+        old = path.read_text()
+        block_range = find_managed_block(old)
+        if block_range is not None:
+            start, end = block_range
+            old_user_content = (old[:start] + old[end:]).strip()
+        else:
+            old_user_content = old.strip()
 
-    # Engine-specific skill / command assets. Each engine declares its own
-    # discovery directories; we scaffold the same skill content into each.
-    skill_dirs_seen: set[str] = set()
+        if old_user_content:
+            divider = (
+                f"\n\n## Carried over from previous {filename}\n\n"
+                "_The content below was in this file before `livery init` ran. "
+                "Reorganize as you see fit; Livery won't touch it again._\n\n"
+            )
+            new_content = fresh_template.rstrip() + divider + old_user_content + "\n"
+        else:
+            new_content = fresh_template
+        path.write_text(new_content)
+        result.appended.append(path)
+
+    _write_fresh(target / "agents" / ".gitkeep", "")
+    _write_fresh(target / "tickets" / ".gitkeep", "")
+
+    # Engine-specific skill / command assets. For each target path:
+    # - if missing → write Livery's
+    # - if present and Livery-managed → no-op overwrite (refresh content)
+    # - if present and NOT Livery-managed → callback decides rename vs skip
+    skill_targets_seen: set[str] = set()
+
+    def _install_skill_file(path: Path, content: str) -> None:
+        if str(path) in skill_targets_seen:
+            return
+        skill_targets_seen.add(str(path))
+
+        if not path.exists():
+            _write_fresh(path, content)
+            return
+
+        if _is_livery_managed_skill(path):
+            # It's ours. Refresh in place.
+            path.write_text(content)
+            result.created.append(path)
+            return
+
+        # User-written file at our target path. Ask the callback what to do.
+        decision = callback(path)
+
+        if decision.action == "skip":
+            result.skipped.append((
+                path,
+                "user-written skill/command at Livery target path; left in place. "
+                "Livery's version was NOT installed.",
+            ))
+            return
+
+        if decision.action == "overwrite":
+            path.write_text(content)
+            result.created.append(path)
+            return
+
+        if decision.action == "rename":
+            assert decision.new_name, "rename resolution requires new_name"
+            try:
+                if _is_skill_path(path):
+                    new_path = _rename_user_skill(path, decision.new_name)
+                else:
+                    new_path = _rename_user_command(path, decision.new_name)
+            except FileExistsError as e:
+                # Bubble up to the caller — CLI can re-prompt for a different name.
+                raise FileExistsError(
+                    f"can't rename existing skill/command at {path}: {e}"
+                ) from e
+            result.backed_up.append((path, new_path))
+            _write_fresh(path, content)
+            return
+
+        raise ValueError(f"unknown collision action: {decision.action!r}")
+
     for eid in engine_ids:
         engine = COS_ENGINES[eid]
         if engine.commands_dir:
-            cmd_path = target / engine.commands_dir / "ticket.md"
-            if str(cmd_path) not in skill_dirs_seen:
-                _write(cmd_path, TICKET_SLASH)
-                skill_dirs_seen.add(str(cmd_path))
+            _install_skill_file(target / engine.commands_dir / "ticket.md", TICKET_SLASH)
         if engine.skills_dir:
-            skill_path = target / engine.skills_dir / "new-ticket" / "SKILL.md"
-            if str(skill_path) not in skill_dirs_seen:
-                _write(skill_path, NEW_TICKET_SKILL)
-                skill_dirs_seen.add(str(skill_path))
+            _install_skill_file(target / engine.skills_dir / "new-ticket" / "SKILL.md", NEW_TICKET_SKILL)
 
-    return created
+    return result

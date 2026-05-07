@@ -18,7 +18,11 @@ from .dispatch_view import (
 )
 from .doctor import run_doctor
 from .hire import SUGGESTED_MODELS, SUPPORTED_RUNTIMES, hire_agent
-from .init import SUPPORTED_COS_ENGINES, init_workspace
+from .init import (
+    SUPPORTED_COS_ENGINES,
+    SkillCollisionResolution,
+    init_workspace,
+)
 from .onboard import run_onboarding
 from .paths import find_root
 from .status import DEFAULT_RECENT_CLOSED_LIMIT, DEFAULT_STALE_DAYS, compute_status
@@ -577,8 +581,48 @@ def init(
         if answer:
             telegram_token_file = answer
 
+    def _interactive_collision_callback(path: Path) -> SkillCollisionResolution:
+        """Interactive prompt for a colliding skill/command file at `path`.
+
+        The user's existing skill/command might serve a real purpose (e.g.,
+        a pre-existing `/ticket` command from another tool). Default
+        offer is rename — let the user keep their thing functional under
+        a different name — with skip and overwrite as alternatives.
+        """
+        rel = path.relative_to(target)
+        typer.echo("")
+        typer.echo(
+            f"Found existing {rel} that's not Livery-managed. Your version may "
+            "still be useful — what should I do?"
+        )
+        typer.echo("  [r]ename your version to a new name (keeps it functional)")
+        typer.echo("  [s]kip — leave yours alone, don't install Livery's")
+        typer.echo("  [o]verwrite — replace yours with Livery's (destructive)")
+
+        while True:
+            choice = typer.prompt("[r/s/o]", default="r").strip().lower()
+            if choice in ("r", "rename"):
+                new_name = typer.prompt(
+                    f"  New name for your existing {rel.name} (e.g. 'my-ticket')"
+                ).strip()
+                if not new_name:
+                    typer.echo("  Empty name — pick again.", err=True)
+                    continue
+                return SkillCollisionResolution.rename(new_name)
+            if choice in ("s", "skip"):
+                return SkillCollisionResolution.skip()
+            if choice in ("o", "overwrite"):
+                if typer.confirm(
+                    f"  Confirm: overwrite your {rel} with Livery's version? "
+                    "(your existing content will be lost)",
+                    default=False,
+                ):
+                    return SkillCollisionResolution.overwrite()
+                continue
+            typer.echo(f"  '{choice}' isn't one of r/s/o. Try again.", err=True)
+
     try:
-        created = init_workspace(
+        result = init_workspace(
             target=target,
             name=name,
             description=description or "",
@@ -587,14 +631,26 @@ def init(
             telegram_token_file=telegram_token_file,
             cos_engine=cos_engine,
             overwrite=force,
+            skill_collision_callback=(
+                _interactive_collision_callback if should_prompt else None
+            ),
         )
     except (FileExistsError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1)
 
     typer.echo(f"Initialized workspace '{name}' at {target}")
-    for p in created:
+    for p in result.created:
         typer.echo(f"  + {p.relative_to(target)}")
+    for p in result.appended:
+        typer.echo(f"  ✱ {p.relative_to(target)}  (Livery template written; previous content carried over below)")
+    for orig, renamed in result.backed_up:
+        typer.echo(
+            f"  ↪ {orig.relative_to(target)}  →  {renamed.relative_to(target)}  "
+            "(your existing version, kept functional under new name)"
+        )
+    for path, reason in result.skipped:
+        typer.echo(f"  ⚠ {path.relative_to(target)}  skipped — {reason}", err=True)
     typer.echo()
 
     # If the workspace has multiple CoS convention files and we're inside a
