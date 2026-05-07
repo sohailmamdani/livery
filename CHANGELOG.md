@@ -4,7 +4,30 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
-The next bigger release is the **attempt-backed dispatch lifecycle** (plan signed by Claude + Codex via walkie-talkie protocol — see `walkie-talkie.md` if it's still around — and the `CLAUDE-SPEC-INTEGRATION-PLAN.md` doc on the `symphony-spec-analysis` branch). 0.8.6 ships the path-safety prep work for that release plus the unrelated init-safety fix; the attempt-record-and-hooks core lands in a future minor release.
+(none — see 0.9.0 below)
+
+## 0.9.0 — 2026-05-07
+
+The **attempt-backed dispatch lifecycle** release. Implementation plan was hashed out and signed by Claude + Codex via the walkie-talkie protocol (see `walkie-talkie.md` and the `CLAUDE-SPEC-INTEGRATION-PLAN.md` doc on the `symphony-spec-analysis` branch). 0.8.6 already shipped the path-safety prep work; this release adds durable attempt records, attempt-aware status reporting, and user-configurable lifecycle hooks.
+
+### Added
+- **Durable dispatch attempt records.** Every `prepare_dispatch` now writes a JSON record to `<workspace>/.livery/dispatch/attempts/<attempt-id>.json` capturing the full dispatch context: ticket id, assignee, runtime, model, workspace + agent cwd, worktree path, prompt path, output path, generated command, status, timestamps, hooks, hook warnings. Schema is versioned (`schema_version=1`); future Livery versions can add fields additively. Atomic writes via `<file>.json.tmp` + `os.replace`. Attempt id format: `<ticket-id>-<assignee>-<YYYYMMDDTHHMMSSZ>-<4hex>` (sortable + collision-resistant + ticket-prefix-globbable).
+- **Attempt status lifecycle.** New `AttemptStatus` enum: `prepared` → `running` → (`succeeded` | `failed` | `blocked` | `stale` | `cancelled` | `unknown`). `livery dispatch ... --run` updates the attempt JSON as the subprocess transitions states (running with PID on launch, finished with exit code on completion, cancelled on Ctrl+C). New `FailureClass` enum (`ticket_error`, `agent_config_error`, `workspace_error`, `runtime_error`, `hook_error`, `notification_error`) for structured failure reporting.
+- **`livery dispatch status` is now attempt-aware.** When run inside a workspace, it reads `.livery/dispatch/attempts/*.json` first and falls back to `/tmp/livery-dispatch-*.out` scanning for any legacy or manually-launched dispatches without an attempt record. Compatibility contract: new dispatches → attempt JSON canonical; old / manual → output scanning; both → JSON wins, output tail fills missing summary/last-line. Output now shows the richer `AttemptStatus` (including `failed / hook_error`, `running`, `cancelled`, etc.) instead of the coarse done/active/stale classification, plus the workspace path the dispatches belong to. `livery dispatch tail` likewise resolves attempts when available.
+- **Read-time status inference for prepared attempts.** A `prepared` attempt with a `=== DISPATCH_SUMMARY ===` block in its output displays as `succeeded`; one whose output file has gone stale (no summary, mtime > 5 min) displays as `stale`. Inference is display-only — never written back to the attempt JSON.
+- **Dispatch lifecycle hooks.** New `[dispatch_hooks]` table in `livery.toml` configures shell commands to run at well-known points in the attempt lifecycle: `after_worktree_create` (fires only when a worktree is made), `before_run` (immediately before the runtime launches), and `after_run` (after the runtime exits). Pre-run hook failures are blocking — the attempt is marked failed with `failure_class=hook_error` and the runtime does not launch. Post-run hook failures are advisory — recorded in `attempt.hook_warnings` without changing the runtime-determined status. Each hook captures stdout+stderr to `<workspace>/.livery/dispatch/hooks/<attempt-id>-<hook-name>.log` and records a `HookOutcome` (exit code, duration, log path, started_at) in the attempt JSON. Hooks see dispatch context via env vars: `LIVERY_TICKET_ID`, `LIVERY_ASSIGNEE`, `LIVERY_RUNTIME`, `LIVERY_MODEL`, `LIVERY_CWD`, `LIVERY_ATTEMPT_ID`, `LIVERY_ATTEMPT_PATH`, `LIVERY_PROMPT_PATH`, `LIVERY_OUTPUT_PATH` (always); `LIVERY_EXIT_CODE` on `after_run` only. Default per-hook timeout 60 s (treated as exit 124).
+- **`livery/attempts.py`** — full module: `DispatchAttempt` and `HookOutcome` dataclasses, atomic `write_attempt`/`load_attempt`, ticket-scoped `find_attempts_for_ticket` and chronological `list_attempts`, lifecycle helpers `mark_running` / `mark_finished`. `ensure_attempts_dir` also drops a `.livery/.gitignore` so the framework's bookkeeping never lands in user commits.
+- **`livery/dispatch_hooks.py`** — hook executor with blocking (`run_pre_run_hook`) and advisory (`run_post_run_hook`) wrappers.
+
+### Changed
+- `DispatchPrep` gained `attempt_id` and `attempt_path` fields. They are populated whenever `prepare_dispatch` succeeds (every dispatch now has a durable record).
+- `dispatch_view.list_dispatches` and `find_dispatch` now accept an optional `workspace_root` argument. When provided, attempt-backed views are surfaced first; without it the old /tmp-only behavior still works (CLI still functions outside a workspace).
+- `DispatchView` gained two display-only fields: `attempt: DispatchAttempt | None` (the underlying record, when there is one) and `inferred_status: AttemptStatus | None` (read-time inference for prepared attempts).
+
+### Compatibility
+- Forward-compat: a status string in attempt JSON that this Livery doesn't recognize is loaded as `AttemptStatus.UNKNOWN` rather than failing.
+- Backward-incompat: a `schema_version` higher than this Livery's refuses to load (`ValueError`) — better than silently dropping unknown fields.
+- Existing workspaces work unchanged; the `.livery/` directory is created on the first dispatch in this version.
 
 ## 0.8.6 — 2026-05-07
 
