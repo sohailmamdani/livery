@@ -64,9 +64,11 @@ app = typer.Typer(no_args_is_help=True, help="Livery — local AI company orches
 ticket_app = typer.Typer(no_args_is_help=True, help="Manage tickets")
 dispatch_app = typer.Typer(no_args_is_help=True, help="Dispatch tickets to registered agents")
 telegram_app = typer.Typer(no_args_is_help=True, help="Manage Telegram bot integration")
+walkie_app = typer.Typer(no_args_is_help=True, help="Walkie-Talkie: turn-based debate between two AI sessions")
 app.add_typer(ticket_app, name="ticket")
 app.add_typer(dispatch_app, name="dispatch")
 app.add_typer(telegram_app, name="telegram")
+app.add_typer(walkie_app, name="walkie")
 
 
 @app.callback()
@@ -1269,6 +1271,112 @@ def telegram_register_commands() -> None:
     for cmd in DEFAULT_LIVERY_BOT_COMMANDS:
         typer.echo(f"  /{cmd['command']:<10} {cmd['description']}")
     typer.echo(f"ok={result.get('ok')}, {len(DEFAULT_LIVERY_BOT_COMMANDS)} commands registered.")
+
+
+@walkie_app.command("new")
+def walkie_new(
+    topic: str = typer.Argument(..., help="Short topic name (will be slugified for the filename)."),
+    peer: str = typer.Option(..., "--with", help="Identity of the peer AI you're walkie-ing with (e.g. 'codex')."),
+    me: str | None = typer.Option(None, "--as", help="Your own identity (defaults to 'initiator' — overwrite with the engine name you go by, e.g. 'claude-code')."),
+    opener: str | None = typer.Option(None, "--opener", help="Optional opening turn body. If given, Turn 1 is pre-filled and signed with --as."),
+) -> None:
+    """Create a new walkie-talkie file for a turn-based debate with `peer`.
+
+    Drops a markdown file at `<workspace>/walkie-talkie/<topic>.md`
+    pre-loaded with the protocol rules. Either AI in the conversation
+    can run this — the protocol is symmetric, the file is shared.
+    """
+    from .walkie import new_walkie
+
+    try:
+        root = find_root()
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    # `peer` is recorded only via Turn N headers as the conversation
+    # unfolds; we don't need to enforce it in frontmatter. But surface
+    # it in the help text + opener so both AIs see who they're talking
+    # to from turn 1.
+    initiator = me or "initiator"
+    try:
+        path = new_walkie(
+            workspace_root=root,
+            topic=topic,
+            opener=opener,
+            initiator=initiator if opener else None,
+        )
+    except FileExistsError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"Created walkie-talkie: {path}")
+    typer.echo(f"  topic: {topic}")
+    typer.echo(f"  with:  {peer}")
+    if opener:
+        typer.echo(f"  Turn 1 written by: {initiator}")
+    else:
+        typer.echo(f"  No turns yet — write Turn 1 by appending to {path.name}.")
+    typer.echo()
+    typer.echo("Tell your peer the file path; they read the protocol from the file itself.")
+
+
+@walkie_app.command("list")
+def walkie_list() -> None:
+    """List walkie-talkie files in this workspace with turn count and lock status."""
+    from .walkie import list_walkies
+
+    try:
+        root = find_root()
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    walkies = list_walkies(root)
+    if not walkies:
+        typer.echo("No walkie-talkies in this workspace.")
+        return
+
+    typer.echo(f"Walkie-talkies in {root}/walkie-talkie/:")
+    typer.echo()
+    for w in walkies:
+        n_turns = len(w.turns)
+        peers = ", ".join(sorted(w.peers)) or "—"
+        signed = ", ".join(sorted(w.signed_peers)) or "—"
+        lock = " [LOCKED]" if w.is_locked else ""
+        typer.echo(f"  {w.path.name}{lock}")
+        typer.echo(f"    topic: {w.topic}")
+        typer.echo(f"    turns: {n_turns}  peers: {peers}  signed: {signed}")
+
+
+@walkie_app.command("show")
+def walkie_show(
+    topic: str = typer.Argument(..., help="Topic substring; resolves uniquely against existing walkies."),
+) -> None:
+    """Print a walkie file's content (and a one-line summary of state)."""
+    from .walkie import list_walkies
+
+    try:
+        root = find_root()
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    matches = [w for w in list_walkies(root) if topic in w.path.stem]
+    if not matches:
+        typer.echo(f"No walkie matching {topic!r}.", err=True)
+        raise typer.Exit(1)
+    if len(matches) > 1:
+        names = ", ".join(w.path.name for w in matches)
+        typer.echo(f"Multiple walkies match {topic!r}: {names}. Be more specific.", err=True)
+        raise typer.Exit(1)
+
+    w = matches[0]
+    n_turns = len(w.turns)
+    typer.echo(f"# {w.path}")
+    typer.echo(f"# turns={n_turns}  peers={sorted(w.peers)}  signed={sorted(w.signed_peers)}  locked={w.is_locked}")
+    typer.echo()
+    typer.echo(w.path.read_text())
 
 
 if __name__ == "__main__":

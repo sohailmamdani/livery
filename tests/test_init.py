@@ -111,6 +111,9 @@ def test_init_workspace_cos_engine_claude_code_only(tmp_path):
     # Claude Code skill scaffolding present
     assert (target / ".claude" / "skills" / "new-ticket" / "SKILL.md").exists()
     assert (target / ".claude" / "commands" / "ticket.md").exists()
+    # Walkie-talkie skill + slash command present
+    assert (target / ".claude" / "skills" / "walkie-talkie" / "SKILL.md").exists()
+    assert (target / ".claude" / "commands" / "walkie.md").exists()
     # Codex skill scaffolding absent
     assert not (target / ".agents").exists()
 
@@ -122,6 +125,9 @@ def test_init_workspace_cos_engine_codex_only(tmp_path):
     assert not (target / "CLAUDE.md").exists()
     # Codex skill scaffolding present at the .agents/ path
     assert (target / ".agents" / "skills" / "new-ticket" / "SKILL.md").exists()
+    # Walkie-talkie skill installed for Codex too — initiating from
+    # either harness must work
+    assert (target / ".agents" / "skills" / "walkie-talkie" / "SKILL.md").exists()
     # No .claude/ directory at all — Codex doesn't read it
     assert not (target / ".claude").exists()
 

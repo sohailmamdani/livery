@@ -180,6 +180,93 @@ Livery tracks work as markdown tickets in `tickets/<YYYY-MM-DD>-<NNN>-<slug>.md`
 """
 
 
+WALKIE_SLASH = """---
+description: Start or continue a Walkie-Talkie debate with another AI session
+argument-hint: [topic] [--with peer-id]
+livery: managed
+---
+
+Run a Walkie-Talkie session — a turn-based, append-only debate between
+this AI session and a peer in another harness (e.g. Codex while you're
+in Claude Code, or vice versa).
+
+If `$ARGUMENTS` includes a topic and `--with`, run:
+  `livery walkie new <topic> --with <peer> --as <self>`
+where `<self>` is the engine you're running in (`claude-code`, `codex`,
+`pi`, `opencode`).
+
+If the user is asking about an existing walkie, run `livery walkie list`
+first and then `livery walkie show <topic>` for the relevant one.
+
+Then participate in the walkie by appending turns to the file. The file
+includes the full protocol at the bottom — read it before each turn and
+follow it strictly.
+"""
+
+
+WALKIE_SKILL = """---
+name: walkie-talkie
+description: Participate in a turn-based async debate with another AI session via a shared markdown file. Use when starting or continuing a Walkie-Talkie, or when the user says "let's walkie-talkie with codex/claude/etc on X".
+livery: managed
+---
+
+# Walkie-Talkie
+
+Walkie-Talkie is a Livery protocol for two AI sessions in different
+harnesses (Claude Code, Codex, Pi, OpenCode) to converge on a hard
+decision by debating in a shared file.
+
+## When to invoke
+
+- User asks to "walkie-talkie with <peer> about <topic>"
+- User invokes `/walkie`
+- The user is already in an active walkie (file under
+  `<workspace>/walkie-talkie/`) and is asking you to take a turn
+
+## Starting a new walkie
+
+Run `livery walkie new <topic> --with <peer-id> --as <your-engine>`. Use
+your harness's engine id for `--as` (`claude-code` for Claude Code,
+`codex` for Codex). Tell the user the file path so they can hand it to
+the peer harness.
+
+After the file exists, take Turn 1 yourself: read the file (the protocol
+section is at the bottom — read it carefully), then append your opening
+turn following the format `## Turn 1 — <your-id> — <ISO8601 ts>`.
+
+## Continuing an existing walkie
+
+1. **Read the entire file from the top.** Don't reply to one turn out
+   of context.
+2. Find the highest `Turn N` header. The next turn is `N+1`.
+3. Check whether the previous turn was yours — if so, you're waiting on
+   the peer; don't double-append. Tell the user.
+4. Otherwise, append your turn at the bottom (above the protocol
+   section), following the header format precisely.
+
+## Protocol non-negotiables
+
+The protocol lives in the walkie file itself, but the load-bearing
+rules are:
+
+- **Append only.** Never prepend or rewrite earlier turns.
+- **Turn header format:** `## Turn N — <your-id> — <ISO8601-UTC ts>`.
+  Mismatched headers will desync parsing.
+- **Push back hard.** If you disagree with the peer's reasoning, say
+  so directly with reasoning — don't capitulate.
+- **Sign to converge.** When both you and the peer have agreed,
+  append `SIGNED: <your-id> @ <ts>` inside your turn. Both peers must
+  sign for the walkie to lock.
+
+## Watching for the peer
+
+The peer takes their turn asynchronously. If the user wants you to wait
+on a reply, poll the file (re-read it) periodically — every ~60s when
+actively engaged, ~15s right after you append. Stop when you see the
+turn count has incremented or the user redirects.
+"""
+
+
 @dataclass(slots=True, frozen=True)
 class SkillCollisionResolution:
     """Returned by the skill-collision callback to tell `init_workspace`
@@ -485,7 +572,9 @@ def init_workspace(
         engine = COS_ENGINES[eid]
         if engine.commands_dir:
             _install_skill_file(target / engine.commands_dir / "ticket.md", TICKET_SLASH)
+            _install_skill_file(target / engine.commands_dir / "walkie.md", WALKIE_SLASH)
         if engine.skills_dir:
             _install_skill_file(target / engine.skills_dir / "new-ticket" / "SKILL.md", NEW_TICKET_SKILL)
+            _install_skill_file(target / engine.skills_dir / "walkie-talkie" / "SKILL.md", WALKIE_SKILL)
 
     return result
