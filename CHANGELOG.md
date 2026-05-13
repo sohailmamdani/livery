@@ -4,7 +4,29 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
-(none — see 0.9.0 below)
+(none — see 0.10.0 below)
+
+## 0.10.0 — 2026-05-13
+
+The **Walkie-Talkie auto-mode** release. v0.8.x's manual walkie-talkie protocol (markdown file + append-only turns + sign-to-converge) now has a controller that drives the loop automatically: each turn is a Livery dispatch, peers alternate by themselves, and the operator only writes the briefing once.
+
+### Added
+- **`livery walkie auto <topic>`** — automated walkie-talkie controller. Two declared peers (hired Livery agents) alternate appending turns until both sign or `--max-turns` is reached. Flags: `--peer-a`, `--peer-b`, `--briefing` (inline or `@file`), `--ticket` (canonical question lives in a ticket; its markdown is embedded in every turn), `--max-turns` (default 20), `--turn-timeout` (default 600s), `--resume` (continue an existing walkie).
+- **`prepare_walkie_turn`** (in `livery/dispatch.py`) — sibling to `prepare_dispatch`. Builds a three-layer prompt for one turn: peer's `AGENTS.md` (identity) + optional briefing / ticket markdown (constant debate context) + walkie task template (read the file, take Turn N, follow protocol, exit). Prompt lands under `.livery/walkie-talkie/prompts/<attempt-id>.txt`; output to `/tmp` so existing `dispatch status` / `dispatch tail` machinery still works.
+- **`livery/walkie_controller.py`** — the loop. `run_controller` parses the walkie file, picks the next peer via `decide_next_peer` (alternates by last turn header), calls `prepare_walkie_turn`, spawns the runtime as a subprocess, waits, marks the attempt finished, and re-parses to confirm a turn was appended. Stops on lock, stall, runtime failure, timeout, or max-turns — each with an explicit reason.
+- **Per-turn dispatch attempts.** Each walkie turn is a full `DispatchAttempt` with its own JSON record under `.livery/dispatch/attempts/`. PID, exit code, lifecycle timestamps, hook outcomes — same audit trail as any other dispatch. Attempt ids carry the walkie label (`walkie-<topic-slug>-tNNN-<peer>-<ts>-<hex>`).
+- **Briefing + peers + ticket in walkie frontmatter.** `new_walkie` accepts `briefing`, `peers`, and `ticket_id` arguments. Briefing lands in a `## Briefing` section above the protocol; peers and ticket go in frontmatter so the controller can resume statelessly. `parse_walkie` reads them back as `WalkieFile.declared_peers` and `WalkieFile.ticket_id`.
+- **Hook integration per turn.** `before_run` and `after_run` dispatch hooks (from v0.9.0) fire on every walkie turn. Configure `[dispatch_hooks].after_run = "..."` in `livery.toml` to get a Telegram ping on each turn for free.
+
+### Failure modes (explicit, no silent retries)
+- **Peer ran but didn't append a turn** → `ControllerStep.advanced=False`; loop stops with `stalled` reason. Operator can investigate the attempt's output file and resume.
+- **Peer's runtime exited non-zero** → loop stops; attempt JSON has `failure_class=runtime_error` and the exit code.
+- **Per-turn timeout** → attempt marked `stale` with `failure_class=runtime_error` and "timed out after Ns" detail; loop stops.
+- **Ctrl+C** → in-flight attempt completes, then loop bails. Walkie file is preserved; `--resume` picks up at the next turn.
+
+### Mental model
+- Manual walkie (`livery walkie new`) is still there — useful when you want full control over each turn or are pairing with a human.
+- Auto walkie (`livery walkie auto`) is the standard mode for AI-to-AI debate. The briefing is the constant frame; the walkie file is the evolving transcript; each turn is a dispatch attempt.
 
 ## 0.9.0 — 2026-05-07
 
