@@ -203,3 +203,94 @@ def test_list_walkies_sorted_recent_first(tmp_path):
     walkies = list_walkies(tmp_path)
     assert walkies[0].path.stem == "late-t"
     assert walkies[1].path.stem == "early-t"
+
+
+# -----------------------------------------------------------------------------
+# Auto-mode metadata: briefing, peers, ticket reference
+# -----------------------------------------------------------------------------
+
+
+def test_new_walkie_with_briefing_writes_section(tmp_path):
+    path = new_walkie(
+        workspace_root=tmp_path,
+        topic="t",
+        briefing="The question is: build option 3 now, or later?\n\nContext: ...",
+    )
+    text = path.read_text()
+    assert "## Briefing" in text
+    assert "build option 3 now, or later?" in text
+    # Briefing comes before the protocol section
+    assert text.index("## Briefing") < text.index("LIVERY-WALKIE-TALKIE PROTOCOL")
+
+
+def test_new_walkie_with_peers_records_in_frontmatter(tmp_path):
+    path = new_walkie(
+        workspace_root=tmp_path, topic="t",
+        peers=["proposer", "critic"],
+    )
+    parsed = parse_walkie(path)
+    assert parsed.declared_peers == ["proposer", "critic"]
+
+
+def test_new_walkie_with_ticket_records_in_frontmatter(tmp_path):
+    path = new_walkie(
+        workspace_root=tmp_path, topic="t",
+        ticket_id="2026-05-13-001-x",
+    )
+    parsed = parse_walkie(path)
+    assert parsed.ticket_id == "2026-05-13-001-x"
+
+
+def test_parse_legacy_walkie_has_no_auto_metadata(tmp_path):
+    """A manual-mode walkie has no peers/ticket in frontmatter; parser
+    returns None for both."""
+    path = new_walkie(workspace_root=tmp_path, topic="t")
+    parsed = parse_walkie(path)
+    assert parsed.declared_peers is None
+    assert parsed.ticket_id is None
+
+
+# -----------------------------------------------------------------------------
+# decide_next_peer
+# -----------------------------------------------------------------------------
+
+
+def test_decide_next_peer_picks_first_when_no_turns(tmp_path):
+    from livery.walkie import decide_next_peer
+    path = new_walkie(workspace_root=tmp_path, topic="t", peers=["proposer", "critic"])
+    walkie = parse_walkie(path)
+    assert decide_next_peer(walkie, ["proposer", "critic"]) == "proposer"
+
+
+def test_decide_next_peer_alternates(tmp_path):
+    """After proposer takes Turn 1, next is critic."""
+    from livery.walkie import decide_next_peer
+    path = new_walkie(
+        workspace_root=tmp_path, topic="t",
+        peers=["proposer", "critic"],
+        opener="my pitch", initiator="proposer",
+    )
+    walkie = parse_walkie(path)
+    assert decide_next_peer(walkie, ["proposer", "critic"]) == "critic"
+
+
+def test_decide_next_peer_rejects_single_peer(tmp_path):
+    from livery.walkie import decide_next_peer
+    path = new_walkie(workspace_root=tmp_path, topic="t")
+    walkie = parse_walkie(path)
+    with pytest.raises(ValueError):
+        decide_next_peer(walkie, ["only-peer"])
+
+
+def test_decide_next_peer_handles_external_interjection(tmp_path):
+    """If the last turn was by someone outside the declared peers,
+    fall back to the first declared peer who hasn't gone yet."""
+    from livery.walkie import decide_next_peer
+    path = new_walkie(
+        workspace_root=tmp_path, topic="t",
+        peers=["proposer", "critic"],
+        opener="surprise turn", initiator="someone-else",
+    )
+    walkie = parse_walkie(path)
+    # Neither proposer nor critic has taken a turn yet → start with proposer
+    assert decide_next_peer(walkie, ["proposer", "critic"]) == "proposer"

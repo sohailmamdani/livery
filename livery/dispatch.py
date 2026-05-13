@@ -347,6 +347,219 @@ def prepare_dispatch(
     )
 
 
+WALKIE_TASK_TEMPLATE = """\
+You are participating in a Livery Walkie-Talkie debate as the peer "{peer}".
+
+The shared walkie-talkie file is at:
+{walkie_path}
+
+Your job for this turn:
+1. Read the entire walkie-talkie file from the top — frontmatter,
+   briefing (if present), every previous turn in order, AND the protocol
+   section at the bottom. The protocol governs how you participate.
+2. Take Turn {turn_n}. Your peer is "{other_peer}".
+3. Append your turn to the file. New content goes at the bottom, *above*
+   the `<!-- LIVERY-WALKIE-TALKIE PROTOCOL -->` marker. Do not touch any
+   existing content; this file is append-only.
+4. Use this exact turn header (the controller parses it):
+   `## Turn {turn_n} — {peer} — <ISO8601-UTC timestamp>`
+5. Push back hard if you disagree with prior turns. Don't capitulate to
+   manufacture consensus. Walkie-talkie exists to converge on the
+   correct answer.
+6. If you believe the plan in the file is correct AND your peer's
+   reasoning supports it, end your turn with a line:
+   `SIGNED: {peer} @ <ISO8601-UTC timestamp>`
+
+After you have appended exactly one turn, STOP. Do not take a second
+turn — wait for your peer. Do not modify other files. Exit.
+"""
+
+
+WALKIE_BRIEFING_BLOCK = """\
+---BEGIN BRIEFING---
+
+The debate's canonical question and context. This is the same for every
+turn — both peers see it identically.
+
+{briefing}
+
+---END BRIEFING---
+"""
+
+
+def compose_walkie_prompt(
+    *,
+    peer: str,
+    other_peer: str,
+    agents_md: str,
+    walkie_path: Path,
+    turn_n: int,
+    briefing: str | None = None,
+    ticket_md: str | None = None,
+) -> str:
+    """Three-layer prompt for one walkie turn:
+
+      1. Agent identity — the peer's `AGENTS.md` (who they are).
+      2. Briefing — either the inline briefing string, or the ticket
+         markdown if a ticket holds the question (or both, in that
+         order). Constant across all turns of this walkie.
+      3. Task — the per-turn instruction telling the peer to read the
+         walkie file, take Turn N, follow the protocol, and exit.
+
+    Order matters: identity first (sets the role), then briefing
+    (the question), then task (what to do right now). The walkie file
+    itself is referenced by absolute path; the peer reads it during the
+    turn, so we don't embed its content here (it changes mid-debate).
+    """
+    parts = [
+        f"You are acting as the \"{peer}\" agent in a Livery Walkie-Talkie.",
+        "",
+        "---BEGIN AGENTS.md---",
+        "",
+        agents_md.rstrip(),
+        "",
+        "---END AGENTS.md---",
+        "",
+    ]
+    if briefing:
+        parts.append(WALKIE_BRIEFING_BLOCK.format(briefing=briefing.rstrip()).rstrip())
+        parts.append("")
+    if ticket_md:
+        parts.extend([
+            "---BEGIN TICKET (debate context)---",
+            "",
+            ticket_md.rstrip(),
+            "",
+            "---END TICKET---",
+            "",
+        ])
+    parts.append(WALKIE_TASK_TEMPLATE.format(
+        peer=peer,
+        other_peer=other_peer,
+        walkie_path=str(walkie_path),
+        turn_n=turn_n,
+    ).rstrip())
+    parts.append("")
+    return "\n".join(parts)
+
+
+def prepare_walkie_turn(
+    *,
+    root: Path,
+    walkie_path: Path,
+    peer: str,
+    other_peer: str,
+    turn_n: int,
+    briefing: str | None = None,
+    ticket_md: str | None = None,
+) -> DispatchPrep:
+    """Prepare a single walkie turn as a Livery DispatchAttempt.
+
+    Mirrors `prepare_dispatch` but bypasses the ticket-as-task model:
+    the task is the walkie protocol continuation (built from
+    `compose_walkie_prompt`), the briefing and/or ticket markdown serve
+    as the debate context, and the peer is treated as the assignee.
+
+    Side effects:
+      - Writes the composed prompt to
+        `<workspace>/.livery/walkie-talkie/prompts/<attempt-id>.txt`.
+      - Writes a `DispatchAttempt` JSON (status=PREPARED) to the usual
+        attempts dir; the caller manages the lifecycle from there.
+      - Output is captured to /tmp like a normal dispatch so existing
+        `dispatch status` / `dispatch tail` machinery works.
+    """
+    agent_dir = root / "agents" / peer
+    agent_md_path = agent_dir / "agent.md"
+    agents_md_path = agent_dir / "AGENTS.md"
+    if not agent_md_path.exists():
+        raise ValueError(
+            f"Walkie peer '{peer}' is not a hired agent: missing {agent_md_path}. "
+            f"Run `livery hire {peer}` first."
+        )
+    if not agents_md_path.exists():
+        raise ValueError(f"Peer '{peer}' missing system prompt: {agents_md_path}")
+
+    agent_post = frontmatter.load(agent_md_path)
+    runtime = str(agent_post.get("runtime") or "codex")
+    model = agent_post.get("model")
+    cwd = agent_post.get("cwd") or str(root)
+
+    agents_md = agents_md_path.read_text()
+    prompt = compose_walkie_prompt(
+        peer=peer,
+        other_peer=other_peer,
+        agents_md=agents_md,
+        walkie_path=walkie_path,
+        turn_n=turn_n,
+        briefing=briefing,
+        ticket_md=ticket_md,
+    )
+
+    # Prompts live under the workspace, alongside attempts, so they're
+    # part of the durable record (not /tmp). Walkie label uses the file
+    # stem so multiple turns of the same walkie share a prefix.
+    walkie_label = walkie_path.stem
+    pseudo_ticket_id = f"walkie-{walkie_label}-t{turn_n:03d}"
+    attempt_id = attempt_id_for(pseudo_ticket_id, str(peer))
+
+    prompts_dir = root / ".livery" / "walkie-talkie" / "prompts"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    prompt_path = prompts_dir / f"{attempt_id}.txt"
+    prompt_path.write_text(prompt)
+
+    # Outputs still go to /tmp so `dispatch tail` works without
+    # workspace knowledge. Naming follows the existing convention.
+    output_dir = Path("/tmp")
+    output_path = output_dir / f"livery-dispatch-{pseudo_ticket_id}-{peer}.out"
+
+    command = build_runtime_command(
+        runtime=runtime,
+        model=str(model) if model else None,
+        cwd=str(cwd),
+        prompt_path=prompt_path,
+        output_path=output_path,
+    )
+
+    attempt = DispatchAttempt(
+        schema_version=SCHEMA_VERSION,
+        attempt_id=attempt_id,
+        ticket_id=pseudo_ticket_id,
+        assignee=str(peer),
+        runtime=runtime,
+        model=str(model) if model else None,
+        workspace_root=str(root),
+        agent_cwd=str(cwd),
+        worktree_path=None,
+        prompt_path=str(prompt_path),
+        output_path=str(output_path),
+        command=command,
+        pid=None,
+        started_at=now_iso(),
+        finished_at=None,
+        exit_code=None,
+        status=AttemptStatus.PREPARED,
+        failure_class=None,
+        failure_detail=None,
+        summary_excerpt=[],
+        hooks={},
+        hook_warnings=[],
+    )
+    attempt_path = write_attempt(attempt, root)
+
+    return DispatchPrep(
+        ticket_id=pseudo_ticket_id,
+        assignee=str(peer),
+        runtime=runtime,
+        model=str(model) if model else None,
+        cwd=str(cwd),
+        prompt_path=prompt_path,
+        output_path=output_path,
+        command=command,
+        attempt_id=attempt.attempt_id,
+        attempt_path=attempt_path,
+    )
+
+
 def prepare_fan_out(
     *,
     root: Path,

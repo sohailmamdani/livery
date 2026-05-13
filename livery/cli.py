@@ -1321,6 +1321,114 @@ def walkie_new(
     typer.echo("Tell your peer the file path; they read the protocol from the file itself.")
 
 
+@walkie_app.command("auto")
+def walkie_auto(
+    topic: str = typer.Argument(..., help="Short topic name (slugified for the filename)."),
+    peer_a: str = typer.Option(..., "--peer-a", help="Hired agent id for the first peer (e.g. 'proposer')."),
+    peer_b: str = typer.Option(..., "--peer-b", help="Hired agent id for the second peer (e.g. 'critic')."),
+    briefing: str | None = typer.Option(None, "--briefing", help="Briefing text. Prefix with @ to read from a file (e.g. '@brief.md')."),
+    ticket: str | None = typer.Option(None, "--ticket", help="Optional ticket id holding the canonical question. Its markdown is embedded in each turn."),
+    max_turns: int = typer.Option(20, "--max-turns", help="Stop after this many turns even if not locked."),
+    turn_timeout: int = typer.Option(600, "--turn-timeout", help="Per-turn dispatch timeout in seconds."),
+    resume: bool = typer.Option(False, "--resume", help="Resume an existing walkie file instead of creating a new one."),
+) -> None:
+    """Run an automated walkie-talkie debate between two hired agents.
+
+    The controller dispatches each peer in turn, alternating, until both
+    sign or `max_turns` is reached. Each turn is a Livery dispatch
+    attempt with full audit trail (.livery/dispatch/attempts/).
+
+    Briefing comes from `--briefing` (inline or @file) and/or `--ticket`
+    (the ticket's markdown is embedded in every turn as debate context).
+    Both peers must already be hired agents in this workspace.
+    """
+    from .walkie import new_walkie, walkie_dir
+    from .walkie_controller import run_controller
+
+    try:
+        root = find_root()
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    # Resolve briefing: @path → file contents
+    briefing_text: str | None = None
+    if briefing:
+        if briefing.startswith("@"):
+            brief_path = Path(briefing[1:]).expanduser()
+            if not brief_path.is_absolute():
+                brief_path = root / brief_path
+            if not brief_path.is_file():
+                typer.echo(f"Briefing file not found: {brief_path}", err=True)
+                raise typer.Exit(1)
+            briefing_text = brief_path.read_text()
+        else:
+            briefing_text = briefing
+
+    from .walkie import _slugify
+    slug = _slugify(topic)
+    walkie_path = walkie_dir(root) / f"{slug}.md"
+
+    if resume:
+        if not walkie_path.exists():
+            typer.echo(f"No walkie at {walkie_path} to resume.", err=True)
+            raise typer.Exit(1)
+        typer.echo(f"Resuming walkie at {walkie_path}")
+    else:
+        # Verify both peers are hired agents before creating anything.
+        for p in (peer_a, peer_b):
+            agent_dir = root / "agents" / p
+            if not (agent_dir / "agent.md").exists():
+                typer.echo(
+                    f"Peer '{p}' is not a hired agent (no {agent_dir}/agent.md). "
+                    f"Run `livery hire {p}` first.",
+                    err=True,
+                )
+                raise typer.Exit(1)
+        try:
+            walkie_path = new_walkie(
+                workspace_root=root,
+                topic=topic,
+                briefing=briefing_text,
+                peers=[peer_a, peer_b],
+                ticket_id=ticket,
+            )
+        except FileExistsError as e:
+            typer.echo(f"{e}\nUse --resume to continue the existing walkie.", err=True)
+            raise typer.Exit(1)
+        typer.echo(f"Created walkie: {walkie_path}")
+        typer.echo(f"  peers: {peer_a} ↔ {peer_b}")
+        if ticket:
+            typer.echo(f"  ticket: {ticket} (embedded in every turn)")
+        if briefing_text:
+            typer.echo(f"  briefing: {len(briefing_text)} chars (in walkie body)")
+
+    typer.echo()
+    typer.echo(f"Starting controller (max_turns={max_turns}, turn_timeout={turn_timeout}s)")
+    typer.echo("Ctrl+C aborts the loop; current in-flight turn finishes first.")
+    typer.echo()
+
+    try:
+        result = run_controller(
+            workspace_root=root,
+            walkie_path=walkie_path,
+            max_turns=max_turns,
+            turn_timeout_seconds=turn_timeout,
+            log=lambda msg: typer.echo(msg),
+        )
+    except KeyboardInterrupt:
+        typer.echo("\nAborted by operator. Walkie file preserved; resume with --resume.", err=True)
+        raise typer.Exit(130)
+
+    typer.echo()
+    if result.ok:
+        typer.echo(f"[walkie] LOCKED after {len(result.steps)} turn(s).")
+    else:
+        typer.echo(f"[walkie] stopped: {result.stopped_reason}")
+    typer.echo(f"File:    {result.walkie_path}")
+    typer.echo(f"Attempts: {[s.attempt_id for s in result.steps]}")
+
+
 @walkie_app.command("list")
 def walkie_list() -> None:
     """List walkie-talkie files in this workspace with turn count and lock status."""

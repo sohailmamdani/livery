@@ -115,6 +115,14 @@ class WalkieFile:
     turns: list[Turn] = field(default_factory=list)
     signatures: list[Signature] = field(default_factory=list)
 
+    # Auto-mode metadata (frontmatter). Both None for hand-written walkies.
+    declared_peers: list[str] | None = None
+    """Peers declared in frontmatter (auto-mode). The controller cycles
+    through these in order. Distinct from `peers` which is derived from
+    turn headers."""
+    ticket_id: str | None = None
+    """Optional Livery ticket id holding the briefing for this walkie."""
+
     @property
     def peers(self) -> set[str]:
         """Distinct peer names that have taken at least one turn."""
@@ -126,16 +134,21 @@ class WalkieFile:
 
     @property
     def is_locked(self) -> bool:
-        """A walkie is locked when at least two distinct peers have signed.
+        """A walkie is locked when every peer who has taken a turn has
+        also signed AND at least two distinct peers have signed.
 
-        Two-peer threshold is a *minimum* — a 3-way walkie would need
-        three signatures, but the protocol is currently bilateral.
+        Two-peer minimum is a guard against a single peer signing their
+        own turn and trivially "locking" a one-sided file. For auto-mode
+        walkies the controller stops when this flips True.
         """
         return len(self.signed_peers) >= 2 and self.signed_peers >= self.peers
 
     @property
     def next_turn_n(self) -> int:
         return (self.turns[-1].n if self.turns else 0) + 1
+
+    def last_peer(self) -> str | None:
+        return self.turns[-1].peer if self.turns else None
 
 
 def walkie_dir(workspace_root: Path) -> Path:
@@ -160,6 +173,9 @@ def new_walkie(
     opener: str | None = None,
     initiator: str | None = None,
     when: datetime | None = None,
+    briefing: str | None = None,
+    peers: list[str] | None = None,
+    ticket_id: str | None = None,
 ) -> Path:
     """Scaffold a new walkie-talkie file under <workspace>/walkie-talkie/.
 
@@ -167,9 +183,18 @@ def new_walkie(
     FileExistsError) — walkies are append-only history; if you want a
     fresh one, pick a new topic.
 
+    Auto-mode arguments (all optional, used together):
+      - `briefing`: distilled context block included as a `## Briefing`
+        section above any turns. Both peers read this every turn.
+      - `peers`: list of declared peer ids (recorded in frontmatter so
+        the controller can resume the loop after a restart).
+      - `ticket_id`: id of a Livery ticket holding the canonical
+        question being debated. Recorded in frontmatter; the controller
+        also embeds the ticket markdown in each per-turn dispatch.
+
     If `opener` is given AND `initiator` is given, the file is seeded
-    with Turn 1 by the initiator. Otherwise the file is left at "no
-    turns yet" — the caller is expected to take Turn 1 themselves.
+    with Turn 1 by the initiator (manual-mode bootstrap). Auto-mode
+    skips this and lets the controller dispatch Turn 1 to peer A.
     """
     slug = _slugify(topic)
     target_dir = walkie_dir(workspace_root)
@@ -182,22 +207,23 @@ def new_walkie(
         )
 
     started = (when or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    fm = {
-        "livery": FRONTMATTER_MARKER,
-        "topic": topic,
-        "started": started,
-    }
 
-    # `frontmatter.dumps` re-orders keys; for stability and readability
-    # we hand-write the YAML block. Keys are simple scalars, no escaping
-    # concerns beyond the topic — quote it defensively.
-    yaml_block = (
-        "---\n"
-        f"livery: {FRONTMATTER_MARKER}\n"
-        f"topic: {_yaml_str(topic)}\n"
-        f"started: {started}\n"
-        "---\n"
-    )
+    # Hand-build the YAML block for stable key order + minimal quoting.
+    yaml_lines = [
+        "---",
+        f"livery: {FRONTMATTER_MARKER}",
+        f"topic: {_yaml_str(topic)}",
+        f"started: {started}",
+    ]
+    if peers:
+        # Inline-flow YAML list — simple, no nesting concerns
+        yaml_lines.append(
+            "peers: [" + ", ".join(_yaml_str(p) for p in peers) + "]"
+        )
+    if ticket_id:
+        yaml_lines.append(f"ticket: {_yaml_str(ticket_id)}")
+    yaml_lines.append("---\n")
+    yaml_block = "\n".join(yaml_lines)
 
     body_parts = [
         yaml_block,
@@ -206,6 +232,14 @@ def new_walkie(
         "> file. The protocol is at the bottom — read it before you\n"
         "> append.\n\n",
     ]
+
+    if briefing:
+        body_parts.append(
+            "## Briefing\n\n"
+            "_Distilled by the CoS from the chat thread that triggered this walkie. "
+            "Both peers read this on every turn as the canonical statement of the question._\n\n"
+            f"{briefing.rstrip()}\n\n"
+        )
 
     if opener and initiator:
         body_parts.append(
@@ -246,6 +280,13 @@ def parse_walkie(path: Path) -> WalkieFile:
     topic = str(meta.get("topic") or path.stem)
     started = meta.get("started")
     started_str = str(started) if started else None
+    declared_peers = meta.get("peers")
+    if declared_peers is not None and not isinstance(declared_peers, list):
+        declared_peers = None  # malformed frontmatter — ignore
+    elif declared_peers is not None:
+        declared_peers = [str(p) for p in declared_peers]
+    ticket_id_raw = meta.get("ticket")
+    ticket_id = str(ticket_id_raw) if ticket_id_raw else None
 
     # Find all turn headers + their byte offsets so we can slice bodies.
     matches = list(TURN_HEADER_RE.finditer(body))
@@ -276,6 +317,8 @@ def parse_walkie(path: Path) -> WalkieFile:
         started=started_str,
         turns=turns,
         signatures=signatures,
+        declared_peers=declared_peers,
+        ticket_id=ticket_id,
     )
 
 
@@ -290,6 +333,59 @@ def list_walkies(workspace_root: Path) -> list[WalkieFile]:
     files.sort(key=lambda w: (w.started is None, w.started or ""), reverse=True)
     # `reverse=True` puts None first; flip so None goes last
     return sorted(files, key=lambda w: (w.started is None, -(_started_sort_key(w.started))))
+
+
+@dataclass(slots=True)
+class ControllerStep:
+    """One iteration of the walkie auto-mode controller.
+
+    Captures whose turn ran, the resulting attempt id, and whether the
+    file actually advanced (peer appended a turn) or stalled. Returned
+    by `controller_step` so the caller can log + react without owning
+    the loop policy itself.
+    """
+    peer: str
+    turn_n: int
+    attempt_id: str | None
+    exit_code: int | None
+    advanced: bool
+    """True if the walkie file's turn count incremented past the prior
+    state. False means the peer's dispatch succeeded but it didn't
+    follow the protocol — caller should treat as a stall."""
+    locked_after: bool
+
+
+def decide_next_peer(walkie: "WalkieFile", declared_peers: list[str]) -> str:
+    """Pick which peer takes the next turn.
+
+    Rules:
+      - If no turns yet → first declared peer.
+      - Otherwise → the declared peer that is NOT the last one to take
+        a turn. Cycles bilaterally; works for any 2-peer walkie.
+
+    Raises ValueError if declared_peers is malformed (< 2 peers) — the
+    protocol is bilateral and a single-peer walkie would deadlock.
+    """
+    if len(declared_peers) < 2:
+        raise ValueError(
+            f"walkie needs at least 2 declared peers; got {declared_peers!r}"
+        )
+    last = walkie.last_peer()
+    if last is None:
+        return declared_peers[0]
+    # Find the peer in declared_peers that isn't `last`. For bilateral
+    # walkies this is unambiguous; for >2 peers we fall back to the
+    # next-in-rotation pattern.
+    if last in declared_peers:
+        idx = declared_peers.index(last)
+        return declared_peers[(idx + 1) % len(declared_peers)]
+    # Last turn was taken by a peer not in the declared list — treat as
+    # an external interjection and continue with the first declared
+    # peer who hasn't taken a turn yet, else the first declared peer.
+    for p in declared_peers:
+        if p not in walkie.peers:
+            return p
+    return declared_peers[0]
 
 
 def _started_sort_key(ts: str | None) -> int:
