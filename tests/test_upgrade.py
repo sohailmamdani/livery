@@ -116,7 +116,7 @@ def test_compute_plan_refreshes_stale_managed_block(tmp_path):
     # User content survives
     assert "Sohail-specific stuff here." in item.new_content
     # Fresh managed content is in there
-    assert "Push back hard" in item.new_content
+    assert "The pushback rule" in item.new_content
     # Old stale content is gone
     assert "ancient rule" not in item.new_content
 

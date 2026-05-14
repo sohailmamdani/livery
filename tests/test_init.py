@@ -101,6 +101,11 @@ def test_init_workspace_default_writes_both_cos_files(tmp_path):
     assert "LIVERY-MANAGED:BEGIN" in claude
     assert "LIVERY-MANAGED:END" in claude
     assert "Custom conventions for the CoS" in claude
+    # The pushback rule is load-bearing — it's THE framework opinion. Pin
+    # it explicitly so a future edit doesn't accidentally demote it.
+    assert "The pushback rule" in claude
+    assert "≥70% confidence" in claude
+    assert "opinionated framework" in claude
 
 
 def test_init_workspace_cos_engine_claude_code_only(tmp_path):
@@ -244,7 +249,7 @@ def test_init_strips_old_managed_block_when_appending(tmp_path):
 
     new_content = (target / "CLAUDE.md").read_text()
     # New managed block is present
-    assert "Push back hard" in new_content  # part of fresh COS_MANAGED_BLOCK
+    assert "The pushback rule" in new_content  # part of fresh COS_MANAGED_BLOCK
     # Old "framework block" content is gone
     assert "old framework block content" not in new_content
     # User's real content survives
