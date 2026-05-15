@@ -47,6 +47,15 @@ After that, running `livery status`, `livery ticket new`, or other workspace com
 
 By default `livery link` adds `.livery-link.toml` to `.git/info/exclude` when the repo has a normal `.git/` directory. That keeps the absolute local path out of commits. If your team wants a committed link file, use `--no-exclude` and agree on paths that make sense for every machine.
 
+If you already ran `livery init` inside the project repo and later decide it belongs in the shared workspace, use the cleanup migration:
+
+```sh
+cd ~/code/branddb
+livery link ~/companies/indies-and-micros --repo-id branddb --move-existing-workspace
+```
+
+This moves the repo's tickets, agents, Livery runtime state, and CoS scaffolding into the parent workspace, keeps a copy of the old repo `livery.toml` under `.livery/linked-repos/<repo-id>/`, and leaves the repo with only `.livery-link.toml`. It refuses to merge over different existing files, so review any conflict list instead of forcing it.
+
 ### When to create a second workspace
 
 Create a second workspace for genuinely separate operational contexts:

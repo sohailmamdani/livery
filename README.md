@@ -88,6 +88,10 @@ livery hire writer                      # hire your first agent (interactive wiz
 cd ~/code/my-project
 livery link ~/companies/my-first-company --repo-id my-project
 
+# If this repo was already initialized as a standalone workspace, migrate it
+# into the shared workspace while linking it.
+livery link ~/companies/my-first-company --repo-id my-project --move-existing-workspace
+
 # File a ticket, either for your CoS session ("cos") or a hired agent.
 livery ticket new --title "Draft the homepage copy" --assignee cos
 

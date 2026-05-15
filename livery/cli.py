@@ -24,7 +24,13 @@ from .init import (
     init_workspace,
 )
 from .onboard import run_onboarding
-from .paths import add_link_to_git_exclude, find_root, resolve_workspace, write_link
+from .paths import (
+    add_link_to_git_exclude,
+    find_root,
+    move_existing_workspace_to_link,
+    resolve_workspace,
+    write_link,
+)
 from .status import DEFAULT_RECENT_CLOSED_LIMIT, DEFAULT_STALE_DAYS, compute_status
 from .hooks import HookStatus, install_hooks, uninstall_hooks
 from .upgrade import Action, apply_plan, compute_plan, compute_sync_plan
@@ -857,6 +863,11 @@ def link_repo(
     repo_id: str | None = typer.Option(None, "--repo-id", help="Short id for this repo, e.g. api or web."),
     workspace_id: str | None = typer.Option(None, "--workspace-id", help="Optional stable id for the workspace."),
     force: bool = typer.Option(False, "--force", help="Overwrite an existing .livery-link.toml."),
+    move_existing_workspace: bool = typer.Option(
+        False,
+        "--move-existing-workspace",
+        help="Move an existing in-repo Livery workspace into the target workspace before linking.",
+    ),
     exclude: bool = typer.Option(
         True,
         "--exclude/--no-exclude",
@@ -871,7 +882,14 @@ def link_repo(
     else:
         workspace_root = workspace_root.resolve()
 
+    move_result = None
     try:
+        if move_existing_workspace:
+            move_result = move_existing_workspace_to_link(
+                repo_root=repo_root,
+                workspace_root=workspace_root,
+                repo_id=repo_id,
+            )
         link_path = write_link(
             repo_root=repo_root,
             workspace_root=workspace_root,
@@ -889,6 +907,10 @@ def link_repo(
     typer.echo(f"Link file:        {link_path}")
     if repo_id:
         typer.echo(f"Repo id:          {repo_id}")
+    if move_result:
+        typer.echo(f"Moved items:      {len(move_result.moved)}")
+        if move_result.preserved_config:
+            typer.echo(f"Old config:       {move_result.preserved_config}")
     if excluded:
         typer.echo("Git exclude:      added .livery-link.toml to .git/info/exclude")
 

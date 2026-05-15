@@ -133,6 +133,15 @@ Repo id:   api
 
 By default, `livery link` adds `.livery-link.toml` to `.git/info/exclude` when the project has a normal `.git/` directory. That keeps machine-local absolute paths out of commits. Use `--no-exclude` if you intentionally want to commit the link file.
 
+If a project repo was already initialized with `livery init`, plain `livery link` refuses to write an ineffective link beside the existing `livery.toml`. Use the cleanup migration instead:
+
+```sh
+cd ~/code/acme-api
+livery link ~/work/acme-livery --repo-id api --move-existing-workspace
+```
+
+That moves the repo's Livery scaffolding (`agents/`, `tickets/`, `.livery/`, CoS convention files, and CoS skill directories) into the linked workspace, archives the repo's old `livery.toml` at `.livery/linked-repos/<repo-id>/livery.toml` in the workspace, then writes `.livery-link.toml` in the repo. If the destination already has a different file at one of those paths, Livery stops before moving anything and prints the conflicts.
+
 ## `tickets/<id>.md`
 
 Each ticket is a markdown file with frontmatter and three body sections (`## Description`, optional `## Context`, `## Thread`). `livery ticket new` scaffolds them; `livery ticket close` flips status and commits.

@@ -11,6 +11,7 @@ from livery.paths import (
     LINK_MARKER,
     add_link_to_git_exclude,
     find_root,
+    move_existing_workspace_to_link,
     resolve_workspace,
     write_link,
 )
@@ -27,6 +28,22 @@ def _make_workspace(tmp_path: Path) -> Path:
 def _make_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "acme-api"
     repo.mkdir()
+    return repo
+
+
+def _make_in_repo_workspace(tmp_path: Path) -> Path:
+    repo = _make_repo(tmp_path)
+    (repo / "livery.toml").write_text('name = "repo-local"\n')
+    (repo / "tickets").mkdir()
+    (repo / "tickets" / ".gitkeep").write_text("")
+    (repo / "tickets" / "2026-05-15-001-fix-auth.md").write_text("ticket\n")
+    (repo / "agents" / "dev").mkdir(parents=True)
+    (repo / "agents" / "dev" / "agent.md").write_text("---\nid: dev\n---\n")
+    (repo / "CLAUDE.md").write_text("# Repo CoS\n")
+    (repo / ".claude" / "commands").mkdir(parents=True)
+    (repo / ".claude" / "commands" / "ticket.md").write_text("command\n")
+    (repo / ".livery" / "dispatch" / "attempts").mkdir(parents=True)
+    (repo / ".livery" / "dispatch" / "attempts" / "a.json").write_text("{}\n")
     return repo
 
 
@@ -58,7 +75,10 @@ def test_direct_workspace_marker_wins_at_same_directory(tmp_path):
     other_workspace = tmp_path / "other-livery"
     other_workspace.mkdir()
     (other_workspace / "livery.toml").write_text('name = "other"\n')
-    write_link(repo_root=workspace, workspace_root=other_workspace, force=True)
+    (workspace / LINK_MARKER).write_text(
+        f'workspace = "{other_workspace}"\n',
+        encoding="utf-8",
+    )
 
     resolved = resolve_workspace(workspace)
 
@@ -85,6 +105,131 @@ def test_write_link_refuses_to_overwrite_without_force(tmp_path):
         write_link(repo_root=repo, workspace_root=workspace)
 
 
+def test_write_link_refuses_in_repo_workspace_without_move_flag(tmp_path):
+    workspace = _make_workspace(tmp_path)
+    repo = _make_in_repo_workspace(tmp_path)
+
+    with pytest.raises(RuntimeError) as ei:
+        write_link(repo_root=repo, workspace_root=workspace)
+
+    assert "--move-existing-workspace" in str(ei.value)
+
+
+def test_move_existing_workspace_to_parent_then_link(tmp_path):
+    workspace = _make_workspace(tmp_path)
+    (workspace / "tickets" / ".gitkeep").write_text("")
+    (workspace / "CLAUDE.md").write_text("# Repo CoS\n")
+    (workspace / ".claude" / "commands").mkdir(parents=True)
+    (workspace / ".claude" / "commands" / "ticket.md").write_text("command\n")
+    repo = _make_in_repo_workspace(tmp_path)
+
+    result = move_existing_workspace_to_link(
+        repo_root=repo,
+        workspace_root=workspace,
+        repo_id="api",
+    )
+    write_link(repo_root=repo, workspace_root=workspace, repo_id="api")
+
+    assert not (repo / "livery.toml").exists()
+    assert not (repo / "tickets").exists()
+    assert not (repo / "agents").exists()
+    assert not (repo / "CLAUDE.md").exists()
+    assert (repo / LINK_MARKER).exists()
+    assert (
+        (workspace / "tickets" / "2026-05-15-001-fix-auth.md").read_text()
+        == "ticket\n"
+    )
+    assert (workspace / "agents" / "dev" / "agent.md").exists()
+    assert (workspace / "CLAUDE.md").read_text() == "# Repo CoS\n"
+    assert (workspace / ".claude" / "commands" / "ticket.md").exists()
+    assert (workspace / ".livery" / "dispatch" / "attempts" / "a.json").exists()
+    assert result.preserved_config == (
+        workspace / ".livery" / "linked-repos" / "api" / "livery.toml"
+    )
+    assert result.preserved_config.read_text() == 'name = "repo-local"\n'
+    assert find_root(repo) == workspace
+
+
+def test_move_existing_workspace_refuses_conflicts_without_moving(tmp_path):
+    workspace = _make_workspace(tmp_path)
+    (workspace / "tickets" / "2026-05-15-001-fix-auth.md").write_text("parent\n")
+    repo = _make_in_repo_workspace(tmp_path)
+
+    with pytest.raises(RuntimeError) as ei:
+        move_existing_workspace_to_link(
+            repo_root=repo,
+            workspace_root=workspace,
+            repo_id="api",
+        )
+
+    assert "destination conflicts" in str(ei.value)
+    assert (repo / "livery.toml").exists()
+    assert (
+        (repo / "tickets" / "2026-05-15-001-fix-auth.md").read_text()
+        == "ticket\n"
+    )
+    assert (
+        (workspace / "tickets" / "2026-05-15-001-fix-auth.md").read_text()
+        == "parent\n"
+    )
+
+
+def test_move_existing_workspace_refuses_preserved_config_conflict(tmp_path):
+    workspace = _make_workspace(tmp_path)
+    preserved_config = workspace / ".livery" / "linked-repos" / "api" / "livery.toml"
+    preserved_config.parent.mkdir(parents=True)
+    preserved_config.write_text("existing\n")
+    repo = _make_in_repo_workspace(tmp_path)
+
+    with pytest.raises(RuntimeError) as ei:
+        move_existing_workspace_to_link(
+            repo_root=repo,
+            workspace_root=workspace,
+            repo_id="api",
+        )
+
+    assert "destination conflicts" in str(ei.value)
+    assert (repo / "livery.toml").read_text() == 'name = "repo-local"\n'
+    assert (repo / "tickets" / "2026-05-15-001-fix-auth.md").exists()
+    assert preserved_config.read_text() == "existing\n"
+
+
+def test_move_existing_workspace_refuses_source_archive_collision(tmp_path):
+    workspace = _make_workspace(tmp_path)
+    repo = _make_in_repo_workspace(tmp_path)
+    source_archive = repo / ".livery" / "linked-repos" / "api" / "livery.toml"
+    source_archive.parent.mkdir(parents=True)
+    source_archive.write_text("source archive\n")
+
+    with pytest.raises(RuntimeError) as ei:
+        move_existing_workspace_to_link(
+            repo_root=repo,
+            workspace_root=workspace,
+            repo_id="api",
+        )
+
+    assert "destination conflicts" in str(ei.value)
+    assert (repo / "livery.toml").read_text() == 'name = "repo-local"\n'
+    assert source_archive.read_text() == "source archive\n"
+    assert not (workspace / ".livery").exists()
+
+
+def test_move_existing_workspace_sanitizes_preserved_config_repo_id(tmp_path):
+    workspace = _make_workspace(tmp_path)
+    repo = _make_in_repo_workspace(tmp_path)
+
+    result = move_existing_workspace_to_link(
+        repo_root=repo,
+        workspace_root=workspace,
+        repo_id="api/team",
+    )
+
+    assert result.preserved_config == (
+        workspace / ".livery" / "linked-repos" / "api_team" / "livery.toml"
+    )
+    assert result.preserved_config.read_text() == 'name = "repo-local"\n'
+
+
 def test_livery_link_command_writes_marker_and_git_exclude(tmp_path, monkeypatch):
     workspace = _make_workspace(tmp_path)
     repo = _make_repo(tmp_path)
@@ -101,6 +246,30 @@ def test_livery_link_command_writes_marker_and_git_exclude(tmp_path, monkeypatch
     assert f'workspace = "{workspace}"' in link_text
     assert 'repo_id = "api"' in link_text
     assert LINK_MARKER in (repo / ".git" / "info" / "exclude").read_text()
+
+
+def test_livery_link_command_moves_existing_workspace(tmp_path, monkeypatch):
+    workspace = _make_workspace(tmp_path)
+    repo = _make_in_repo_workspace(tmp_path)
+
+    monkeypatch.chdir(repo)
+    result = CliRunner().invoke(
+        app,
+        [
+            "link",
+            str(workspace),
+            "--repo-id",
+            "api",
+            "--move-existing-workspace",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "Moved items:" in result.stdout
+    assert not (repo / "livery.toml").exists()
+    assert (repo / LINK_MARKER).exists()
+    assert (workspace / "tickets" / "2026-05-15-001-fix-auth.md").exists()
+    assert (workspace / ".livery" / "linked-repos" / "api" / "livery.toml").exists()
 
 
 def test_git_exclude_supports_worktree_git_file(tmp_path):

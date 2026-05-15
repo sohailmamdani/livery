@@ -18,12 +18,24 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+from .paths_safety import sanitize_path_component
 
 WORKSPACE_MARKER = "livery.toml"
 LINK_MARKER = ".livery-link.toml"
+WORKSPACE_ARTIFACTS = (
+    "agents",
+    "tickets",
+    ".livery",
+    ".claude",
+    ".agents",
+    "CLAUDE.md",
+    "AGENTS.md",
+)
 
 
 @dataclass(slots=True)
@@ -37,6 +49,15 @@ class WorkspaceResolution:
     linked_repo_root: Path | None = None
     repo_id: str | None = None
     workspace_id: str | None = None
+
+
+@dataclass(slots=True)
+class WorkspaceMoveResult:
+    """Files moved while converting an in-repo workspace to a linked repo."""
+
+    moved: list[tuple[Path, Path]] = field(default_factory=list)
+    removed: list[Path] = field(default_factory=list)
+    preserved_config: Path | None = None
 
 
 def _toml_string(value: str) -> str:
@@ -142,6 +163,11 @@ def write_link(
         raise RuntimeError(
             f"Repo path does not exist or is not a directory: {repo_root}"
         )
+    if (repo_root / WORKSPACE_MARKER).is_file() and repo_root != workspace_root:
+        raise RuntimeError(
+            f"{repo_root} is already a Livery workspace. To convert it into a "
+            f"linked repo, re-run with --move-existing-workspace."
+        )
     if not (workspace_root / WORKSPACE_MARKER).is_file():
         raise RuntimeError(
             f"{workspace_root} is not a Livery workspace: missing {WORKSPACE_MARKER}"
@@ -162,6 +188,120 @@ def write_link(
         lines.append(f"repo_id = {_toml_string(repo_id)}")
     link_path.write_text("\n".join(lines) + "\n")
     return link_path
+
+
+def _same_file_content(a: Path, b: Path) -> bool:
+    try:
+        return a.read_bytes() == b.read_bytes()
+    except OSError:
+        return False
+
+
+def _collect_merge_conflicts(src: Path, dst: Path) -> list[tuple[Path, Path]]:
+    if not src.exists() or not dst.exists():
+        return []
+    if src.is_dir() and dst.is_dir():
+        conflicts: list[tuple[Path, Path]] = []
+        for child in src.iterdir():
+            conflicts.extend(_collect_merge_conflicts(child, dst / child.name))
+        return conflicts
+    if src.is_file() and dst.is_file():
+        if _same_file_content(src, dst):
+            return []
+    return [(src, dst)]
+
+
+def _merge_move(src: Path, dst: Path, result: WorkspaceMoveResult) -> None:
+    if not src.exists():
+        return
+    if not dst.exists():
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dst))
+        result.moved.append((src, dst))
+        return
+    if src.is_dir() and dst.is_dir():
+        for child in list(src.iterdir()):
+            _merge_move(child, dst / child.name, result)
+        try:
+            src.rmdir()
+            result.removed.append(src)
+        except OSError:
+            pass
+        return
+    if src.is_file() and dst.is_file():
+        if _same_file_content(src, dst):
+            src.unlink()
+            result.removed.append(src)
+            return
+    raise RuntimeError(f"Cannot move {src} to {dst}: destination already exists")
+
+
+def move_existing_workspace_to_link(
+    *,
+    repo_root: Path,
+    workspace_root: Path,
+    repo_id: str | None = None,
+) -> WorkspaceMoveResult:
+    """Move in-repo Livery workspace state into `workspace_root`.
+
+    This is the cleanup path for repos that were accidentally initialized as
+    standalone workspaces but should instead link to a parent workspace.
+    """
+    repo_root = repo_root.resolve()
+    workspace_root = workspace_root.expanduser().resolve()
+    if repo_root == workspace_root:
+        raise RuntimeError("Repo and workspace are the same directory; nothing to move.")
+    if not (repo_root / WORKSPACE_MARKER).is_file():
+        raise RuntimeError(f"{repo_root} is not an in-repo Livery workspace.")
+    if not (workspace_root / WORKSPACE_MARKER).is_file():
+        raise RuntimeError(
+            f"{workspace_root} is not a Livery workspace: missing {WORKSPACE_MARKER}"
+        )
+
+    conflicts: list[tuple[Path, Path]] = []
+    for name in WORKSPACE_ARTIFACTS:
+        conflicts.extend(
+            _collect_merge_conflicts(repo_root / name, workspace_root / name)
+        )
+    preserve_id = sanitize_path_component(repo_id or repo_root.name, fallback="repo")
+    preserved_config = (
+        workspace_root
+        / ".livery"
+        / "linked-repos"
+        / preserve_id
+        / WORKSPACE_MARKER
+    )
+    source_preserved_config = (
+        repo_root
+        / ".livery"
+        / "linked-repos"
+        / preserve_id
+        / WORKSPACE_MARKER
+    )
+    if preserved_config.exists() or source_preserved_config.exists():
+        conflicts.append((repo_root / WORKSPACE_MARKER, preserved_config))
+    if conflicts:
+        rendered = "\n".join(f"  {src} -> {dst}" for src, dst in conflicts[:10])
+        extra = (
+            ""
+            if len(conflicts) <= 10
+            else f"\n  ...and {len(conflicts) - 10} more"
+        )
+        raise RuntimeError(
+            "Cannot move existing workspace; destination conflicts:\n"
+            f"{rendered}{extra}"
+        )
+
+    result = WorkspaceMoveResult()
+    for name in WORKSPACE_ARTIFACTS:
+        _merge_move(repo_root / name, workspace_root / name, result)
+
+    old_config = repo_root / WORKSPACE_MARKER
+    preserved_config.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(old_config), str(preserved_config))
+    result.moved.append((old_config, preserved_config))
+    result.preserved_config = preserved_config
+    return result
 
 
 def add_link_to_git_exclude(repo_root: Path) -> bool:

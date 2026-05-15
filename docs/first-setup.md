@@ -147,6 +147,15 @@ livery where
 
 This writes `.livery-link.toml` in the project repo. The file points to the workspace, but the repo does not become a workspace. By default, Livery adds the link file to `.git/info/exclude` because it contains a local absolute path.
 
+If you accidentally created a full Livery workspace inside the project repo first, migrate that scaffolding into the shared workspace while linking:
+
+```sh
+cd ~/code/my-project
+livery link ~/companies/my-first-company --repo-id my-project --move-existing-workspace
+```
+
+The migration moves the repo's tickets, agents, runtime metadata, and CoS scaffolding into the parent workspace. The repo is left with `.livery-link.toml`, and the old repo `livery.toml` is archived in the parent workspace under `.livery/linked-repos/<repo-id>/`.
+
 For an isolated one-off project, it is also acceptable to create a dedicated Livery workspace for that project. The decision rule is whether the same CoS should share context, tickets, and agents across the work.
 
 ## Step 4: Edit `CLAUDE.md`
