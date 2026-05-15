@@ -6,6 +6,15 @@ If you've already skimmed the README and just want the conceptual model (one wor
 
 **TL;DR:** after installing, create a dedicated workspace directory and run `livery onboard` — it chains the runtime check, workspace init, and first-agent hire into a single guided flow and tells you what to do next. The walkthrough below is the same path, broken out so you understand each step.
 
+At any point, ask Livery what applies from your current directory:
+
+```sh
+livery next
+livery capabilities
+```
+
+Both commands also support `--format json`, which is meant for Codex, Claude Code, and other CoS agents. The managed `CLAUDE.md` / `AGENTS.md` block tells agents to consult these commands instead of guessing from stale memory.
+
 ## Prerequisites
 
 ### 1. `uv`

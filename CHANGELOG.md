@@ -7,9 +7,11 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 ### Added
 - Linked project repos. `livery link <workspace>` writes `.livery-link.toml` in a project repo so commands run from that repo operate on the linked workspace. `livery where` shows whether the current directory resolved through a workspace marker, linked repo marker, or legacy marker.
 - Linked-repo cleanup migration. `livery link <workspace> --move-existing-workspace` converts a repo that was accidentally initialized as its own Livery workspace into a linked repo by moving its workspace scaffolding into the parent workspace, preserving the old `livery.toml` under `.livery/linked-repos/<repo-id>/`, then writing `.livery-link.toml`.
+- Discoverability commands. `livery capabilities` prints the feature menu, and `livery next` inspects the current directory and suggests the most relevant next actions. Both support `--format json` so CoS agents can consume the same live framework truth as humans.
 
 ### Changed
 - Workspace guidance now frames the boundary as an operational context rather than strictly "one company, not one project." Multi-repo operations should share a workspace; isolated one-off projects may have their own.
+- The managed CoS convention block now tells Claude Code, Codex, and other CoS agents to run `livery next` / `livery capabilities` instead of guessing which Livery features exist.
 
 ## 0.10.1 — 2026-05-15
 

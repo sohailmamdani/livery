@@ -127,6 +127,16 @@ you, not the intern-compliance version.
 - Every ticket mutation should be followed by a git commit.
 - Plain language. Tech-savvy users may not be programmers; skip jargon.
 
+## Discoverability
+
+- When you are unsure what Livery can do from the current directory, run
+  `livery next`.
+- When you need the full feature menu, run `livery capabilities`.
+- When acting programmatically or advising another agent, prefer structured
+  output: `livery next --format json` and `livery capabilities --format json`.
+- Treat those commands as live framework truth. Do not rely on stale memory
+  or guess at hidden options.
+
 ## Livery loop, in one paragraph
 
 You file tickets (`livery ticket new`), the CoS handles them directly or

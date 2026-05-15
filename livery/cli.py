@@ -9,6 +9,12 @@ from typing import Optional
 import frontmatter
 import typer
 
+from .capabilities import (
+    render_capabilities_json,
+    render_capabilities_text,
+    render_next_json,
+    render_next_text,
+)
 from .dispatch import prepare_dispatch, prepare_fan_out
 from .dispatch_view import (
     DispatchState,
@@ -92,6 +98,47 @@ def _root(
 def _slugify(text: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return s[:40] or "ticket"
+
+
+def _validate_output_format(output_format: str) -> str:
+    if output_format not in {"text", "json"}:
+        typer.echo("--format must be one of: text, json", err=True)
+        raise typer.Exit(1)
+    return output_format
+
+
+@app.command("capabilities")
+def capabilities(
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
+) -> None:
+    """Show Livery's feature menu for humans and agents."""
+    output_format = _validate_output_format(output_format)
+    if output_format == "json":
+        typer.echo(render_capabilities_json(), nl=False)
+    else:
+        typer.echo(render_capabilities_text(), nl=False)
+
+
+@app.command("next")
+def next_command(
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
+) -> None:
+    """Show context-aware next steps for the current directory."""
+    output_format = _validate_output_format(output_format)
+    if output_format == "json":
+        typer.echo(render_next_json(), nl=False)
+    else:
+        typer.echo(render_next_text(), nl=False)
 
 
 def _next_counter(root: Path, today: str) -> int:

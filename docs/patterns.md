@@ -26,6 +26,19 @@ Agents work in *other* directories. Each agent's `agent.md` has a `cwd:` field t
 
 You file tickets in the workspace. The CoS dispatches them to agents, who go do work in their own `cwd`. The workspace itself rarely contains the work product — it contains the **coordination**.
 
+### Discoverability for humans and agents
+
+Livery is usually operated through a CoS session, not by a human memorizing every command. The framework therefore exposes its own live menu:
+
+```sh
+livery next
+livery capabilities
+```
+
+`livery next` looks at the current directory and suggests what matters now: initialize, link, hire, file a ticket, review status, migrate an accidental in-repo workspace, and so on. `livery capabilities` prints the full feature menu grouped by job.
+
+Both commands accept `--format json`. CoS agents should use that structured output when they need to reason about available Livery features or advise another agent. The managed workspace convention block points agents at these commands so they do not have to rely on memory of whichever Livery version they last saw.
+
 ### Linked project repos
 
 For convenience, a project repo can point back to its coordinating workspace with `.livery-link.toml`:

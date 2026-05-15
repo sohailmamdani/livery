@@ -76,6 +76,10 @@ livery onboard                # guided setup — safe to re-run at any point
 Or use the commands directly:
 
 ```sh
+# Ask Livery what applies from wherever you are
+livery next
+livery capabilities
+
 livery init                             # scaffolds CLAUDE.md + AGENTS.md by default
 # livery init --cos-engine codex        # if you'll use Codex (AGENTS.md only)
 # livery init --cos-engine pi           # if you'll use Pi (AGENTS.md, no skill dirs)
@@ -107,6 +111,8 @@ livery ticket close <ticket-id> --summary "Shipped v1 copy."
 # Cancel a ticket you decided not to do (same pipeline as close)
 livery ticket close <ticket-id> --status cancelled --summary "Folded into the new schema."
 ```
+
+`livery next` and `livery capabilities` are intentionally useful to both humans and CoS agents. Add `--format json` when Codex, Claude Code, or another tool needs structured output instead of prose.
 
 ## Workspace layout
 
