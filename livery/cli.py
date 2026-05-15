@@ -24,7 +24,7 @@ from .init import (
     init_workspace,
 )
 from .onboard import run_onboarding
-from .paths import find_root
+from .paths import add_link_to_git_exclude, find_root, resolve_workspace, write_link
 from .status import DEFAULT_RECENT_CLOSED_LIMIT, DEFAULT_STALE_DAYS, compute_status
 from .hooks import HookStatus, install_hooks, uninstall_hooks
 from .upgrade import Action, apply_plan, compute_plan, compute_sync_plan
@@ -848,6 +848,69 @@ def init(
     if len(cos_files) > 1 and not (target / ".git" / "hooks" / "pre-commit").is_file():
         typer.echo("Tip: `livery install-hooks` adds a pre-commit hook that keeps your")
         typer.echo("     convention files in sync automatically.")
+
+
+@app.command("link")
+def link_repo(
+    workspace: Path = typer.Argument(..., help="Livery workspace this repo should use."),
+    repo: Path = typer.Option(Path("."), "--repo", "-r", help="Project repo to link (default: cwd)."),
+    repo_id: str | None = typer.Option(None, "--repo-id", help="Short id for this repo, e.g. api or web."),
+    workspace_id: str | None = typer.Option(None, "--workspace-id", help="Optional stable id for the workspace."),
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing .livery-link.toml."),
+    exclude: bool = typer.Option(
+        True,
+        "--exclude/--no-exclude",
+        help="Add .livery-link.toml to .git/info/exclude when this is a git repo.",
+    ),
+) -> None:
+    """Link a project repo to a Livery workspace."""
+    repo_root = repo.expanduser().resolve()
+    workspace_root = workspace.expanduser()
+    if not workspace_root.is_absolute():
+        workspace_root = (Path.cwd() / workspace_root).resolve()
+    else:
+        workspace_root = workspace_root.resolve()
+
+    try:
+        link_path = write_link(
+            repo_root=repo_root,
+            workspace_root=workspace_root,
+            repo_id=repo_id,
+            workspace_id=workspace_id,
+            force=force,
+        )
+    except (RuntimeError, FileExistsError) as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    excluded = add_link_to_git_exclude(repo_root) if exclude else False
+    typer.echo(f"Linked repo:      {repo_root}")
+    typer.echo(f"Workspace:        {workspace_root}")
+    typer.echo(f"Link file:        {link_path}")
+    if repo_id:
+        typer.echo(f"Repo id:          {repo_id}")
+    if excluded:
+        typer.echo("Git exclude:      added .livery-link.toml to .git/info/exclude")
+
+
+@app.command("where")
+def where() -> None:
+    """Show which Livery workspace the current directory resolves to."""
+    try:
+        resolved = resolve_workspace()
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"Workspace: {resolved.workspace_root}")
+    typer.echo(f"Source:    {resolved.kind}")
+    typer.echo(f"Marker:    {resolved.marker_path}")
+    if resolved.linked_repo_root:
+        typer.echo(f"Repo:      {resolved.linked_repo_root}")
+    if resolved.repo_id:
+        typer.echo(f"Repo id:   {resolved.repo_id}")
+    if resolved.workspace_id:
+        typer.echo(f"Workspace id: {resolved.workspace_id}")
 
 
 def _prompt_runtime(default: Optional[str]) -> str:

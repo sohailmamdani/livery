@@ -2,7 +2,7 @@
 
 A step-by-step walkthrough for getting Livery running end-to-end. By the end of this, you'll have a workspace, one hired agent, and a ticket dispatched and closed. Expect ~20 minutes.
 
-If you've already skimmed the README and just want the conceptual model (one workspace per company, not per project), read [`docs/patterns.md`](patterns.md) first and come back.
+If you've already skimmed the README and just want the conceptual model (one workspace per operational context, with linked project repos when useful), read [`docs/patterns.md`](patterns.md) first and come back.
 
 **TL;DR:** after installing, create a dedicated workspace directory and run `livery onboard` — it chains the runtime check, workspace init, and first-agent hire into a single guided flow and tells you what to do next. The walkthrough below is the same path, broken out so you understand each step.
 
@@ -81,7 +81,7 @@ Don't panic about `FAIL` rows for runtimes you don't use. You only need one runt
 
 ## Step 3: Create your workspace
 
-A workspace is a directory. It is **not** a code repo. Make it somewhere you won't confuse with your actual projects. A common convention:
+A workspace is a directory for coordination: tickets, agents, CoS conventions, and runtime state. For a multi-repo operation, keep it somewhere you won't confuse with your actual projects. A common convention:
 
 ```sh
 mkdir -p ~/companies/my-first-company
@@ -134,6 +134,20 @@ Commit the scaffolding:
 git add -A
 git commit -m "Initial Livery scaffold"
 ```
+
+### Optional: link a project repo to this workspace
+
+If you want `livery` commands to work from inside a project repo while still using this workspace's ticket queue, link the repo:
+
+```sh
+cd ~/code/my-project
+livery link ~/companies/my-first-company --repo-id my-project
+livery where
+```
+
+This writes `.livery-link.toml` in the project repo. The file points to the workspace, but the repo does not become a workspace. By default, Livery adds the link file to `.git/info/exclude` because it contains a local absolute path.
+
+For an isolated one-off project, it is also acceptable to create a dedicated Livery workspace for that project. The decision rule is whether the same CoS should share context, tickets, and agents across the work.
 
 ## Step 4: Edit `CLAUDE.md`
 

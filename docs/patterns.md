@@ -2,14 +2,16 @@
 
 Worked examples of how Livery gets used in practice. These are intentionally hands-on — the shape of a real workspace, not abstract theory.
 
-## One workspace per company, not per project
+## One workspace per operational context
 
-The foundational pattern. A **workspace** is a company: one directory, one `livery.toml`, one team of agents, one ticket backlog, one `CLAUDE.md` with that company's conventions. You `cd` into the workspace and open Claude Code — the session that loads is your **CoS** for that company.
+The foundational pattern. A **workspace** is the operational context your CoS is responsible for understanding: one directory, one `livery.toml`, one team of agents, one ticket backlog, one `CLAUDE.md` / `AGENTS.md` with that operation's conventions.
 
-Agents work in *other* directories. Each agent's `agent.md` has a `cwd:` field that can point anywhere on your machine — a code repo, a writing project, a content folder. So a typical layout looks like:
+For a real company or client, that often means one workspace coordinating several repos. For an isolated one-off project, the project can have its own workspace. The boundary is not "company" or "repo" by itself. The boundary is: **should the same CoS share context, priorities, agents, and ticket history for this work?**
+
+Agents work in *other* directories. Each agent's `agent.md` has a `cwd:` field that can point anywhere on your machine — a code repo, a writing project, a content folder. So a multi-repo operation typically looks like:
 
 ```
-~/companies/indies-and-micros/    ← workspace (company HQ)
+~/companies/indies-and-micros/    ← workspace (CoS HQ)
   livery.toml
   CLAUDE.md
   agents/
@@ -24,23 +26,45 @@ Agents work in *other* directories. Each agent's `agent.md` has a `cwd:` field t
 
 You file tickets in the workspace. The CoS dispatches them to agents, who go do work in their own `cwd`. The workspace itself rarely contains the work product — it contains the **coordination**.
 
+### Linked project repos
+
+For convenience, a project repo can point back to its coordinating workspace with `.livery-link.toml`:
+
+```toml
+workspace = "/Users/me/companies/indies-and-micros"
+repo_id = "branddb"
+```
+
+Create it from the project repo:
+
+```sh
+cd ~/code/branddb
+livery link ~/companies/indies-and-micros --repo-id branddb
+livery where
+```
+
+After that, running `livery status`, `livery ticket new`, or other workspace commands from inside `~/code/branddb` uses the linked workspace. The repo does not become a workspace; it just knows where its CoS HQ lives.
+
+By default `livery link` adds `.livery-link.toml` to `.git/info/exclude` when the repo has a normal `.git/` directory. That keeps the absolute local path out of commits. If your team wants a committed link file, use `--no-exclude` and agree on paths that make sense for every machine.
+
 ### When to create a second workspace
 
-Only for genuinely separate operational contexts:
+Create a second workspace for genuinely separate operational contexts:
 - Personal vs. client work
 - Two unrelated domains (a research operation and a content operation)
 - Different teams you don't want bleeding into each other's ticket queues
+- A one-off project whose tickets, agents, and CoS context should stay self-contained
 
-If you just have a new repo, that's a new agent (or a new agent `cwd:`), not a new workspace. Don't `livery init` in every project — you'll fragment your ticket queue and lose the whole point.
+If you just have a new repo inside the same operation, link it to the existing workspace or point an agent's `cwd:` at it. Don't `livery init` in every related repo — you'll fragment your ticket queue and split one CoS brain into several smaller, less useful ones.
 
-### Why one workspace beats one-per-project
+### Why one shared workspace can beat one-per-repo
 
 1. **Ticket queue coherence.** One list of what's going on, not twelve. `livery ticket list` shows the state of the whole business.
 2. **Shared CoS context.** The CoS knows about all your agents and all your active work. It can push a ticket between agents, chain tickets, notice patterns across projects.
 3. **One Telegram channel.** One workspace = one mission control. N workspaces = N Telegram groups.
 4. **Agents are reusable.** One `researcher` agent can pull tickets about five different projects, because projects are encoded in the ticket content, not the workspace boundary.
 
-The "one workspace per project" anti-pattern is tempting because it matches how git works. It's wrong for Livery because Livery is coordination, not source control. Your git repos are your projects. Your workspace is the company that runs work *across* those repos.
+The one-workspace-per-repo anti-pattern is tempting because it matches how git works. It is wrong when the repos are part of the same operation. Livery is coordination, not source control. Your git repos are your project boundaries; your workspace is the CoS context that runs work across the repos that belong together.
 
 ## A research-and-editorial workspace
 

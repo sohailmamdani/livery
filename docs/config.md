@@ -4,10 +4,11 @@ Livery has two kinds of config:
 
 1. **Workspace config** — `livery.toml` at the workspace root. Marks the directory as a Livery workspace and captures user-specific settings.
 2. **Agent config** — `agents/<id>/agent.md` frontmatter. Declares what an agent is, what runtime it runs on, and where it works.
+3. **Linked-repo config** — `.livery-link.toml` at a project repo root. Points project-level `livery` commands back at a workspace.
 
 ## `livery.toml`
 
-`livery.toml` is the workspace marker. The CLI walks up from your cwd looking for this file — so `livery ticket list` works anywhere inside the workspace tree.
+`livery.toml` is the workspace marker. The CLI walks up from your cwd looking for this file — so `livery ticket list` works anywhere inside the workspace tree. If it finds `.livery-link.toml` first, it follows that link and operates on the linked workspace instead.
 
 All fields are optional. A minimal file is just:
 
@@ -94,6 +95,43 @@ One-line role: what this agent does, for whom.
 - **`hired`** — ISO date the agent was created. Informational.
 
 Scaffold new agents with `livery hire <id>` rather than hand-writing these files — the wizard captures the structured fields, and leaves the AGENTS.md system prompt for you to flesh out with your CoS.
+
+## `.livery-link.toml`
+
+Project repos can be linked to a Livery workspace. This is for the common case where the workspace is the coordination HQ, while the actual source lives in one or more separate repos.
+
+Create the link from the project repo:
+
+```sh
+cd ~/code/acme-api
+livery link ~/work/acme-livery --repo-id api
+```
+
+The link file is intentionally small:
+
+```toml
+workspace = "/Users/me/work/acme-livery"
+repo_id = "api"
+workspace_id = "acme"
+```
+
+### Fields
+
+- **`workspace`** — required path to a directory containing `livery.toml`. Absolute paths are simplest. Relative paths are resolved from the directory containing `.livery-link.toml`.
+- **`repo_id`** — optional short name for the project repo, useful in CLI output and future ticket metadata.
+- **`workspace_id`** — optional stable name for the workspace, useful when absolute paths differ across machines.
+
+After linking, `livery where` shows how the current directory resolves:
+
+```sh
+Workspace: /Users/me/work/acme-livery
+Source:    linked-repo
+Marker:    /Users/me/code/acme-api/.livery-link.toml
+Repo:      /Users/me/code/acme-api
+Repo id:   api
+```
+
+By default, `livery link` adds `.livery-link.toml` to `.git/info/exclude` when the project has a normal `.git/` directory. That keeps machine-local absolute paths out of commits. Use `--no-exclude` if you intentionally want to commit the link file.
 
 ## `tickets/<id>.md`
 

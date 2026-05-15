@@ -71,10 +71,11 @@ def _check_workspace(cwd: Path) -> Optional[Path]:
 
     typer.echo("You're not currently inside a Livery workspace.")
     typer.echo("")
-    typer.echo("A workspace is a directory that acts as your company HQ — where")
-    typer.echo("tickets live, where your CoS's conventions live, and where you")
-    typer.echo("hire agents to work in other directories. One workspace per")
-    typer.echo("company, NOT one per project. See docs/patterns.md for details.")
+    typer.echo("A workspace is a directory that acts as your CoS's operating")
+    typer.echo("context — where tickets live, where conventions live, and where")
+    typer.echo("you hire agents to work in other directories. Use one workspace")
+    typer.echo("per operational context; link project repos back to it when useful.")
+    typer.echo("See docs/patterns.md for details.")
     typer.echo("")
 
     if not typer.confirm(f"Create a new workspace here ({cwd})?", default=False):

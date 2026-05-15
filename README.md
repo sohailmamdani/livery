@@ -12,7 +12,7 @@ Tech-savvy operators (not necessarily programmers) who want an AI workforce on t
 
 ## What Livery gives you
 
-- A **workspace** (a directory with `agents/`, `tickets/`, config) that becomes your company HQ.
+- A **workspace** (a directory with `agents/`, `tickets/`, config) that becomes your CoS's operating context.
 - A **CLI** for hiring agents, filing tickets, dispatching work to agents, closing the loop.
 - **Runtime adapters** so agents can live on different stacks: Claude Code CLI, Codex CLI, Cursor, LM Studio, Ollama. Adding a new adapter is ~30 lines of Python.
 - **Telegram integration** — close a ticket, get a ping.
@@ -66,8 +66,8 @@ Check what your install is tracking with `cat ~/.local/share/uv/tools/livery/uv-
 For a full step-by-step walkthrough, see [`docs/first-setup.md`](docs/first-setup.md). **The fastest path:** make a dedicated workspace directory and run `livery onboard`, which chains the runtime check, workspace init, and first-agent hire into one guided flow.
 
 ```sh
-# Create a directory of its own (NOT inside a code repo — the workspace is
-# coordination, not source code). One workspace per company, not per project.
+# Create a directory of its own for shared operations. The workspace is
+# coordination, not source code; project repos can be linked back to it.
 mkdir ~/companies/my-first-company && cd ~/companies/my-first-company
 git init
 livery onboard                # guided setup — safe to re-run at any point
@@ -83,6 +83,10 @@ livery init                             # scaffolds CLAUDE.md + AGENTS.md by def
 # livery init --cos-engine claude_code,codex,pi   # multiple engines, comma-separated
 livery doctor                           # see which runtimes are reachable
 livery hire writer                      # hire your first agent (interactive wizard)
+
+# From a project repo, point local livery commands back at this workspace
+cd ~/code/my-project
+livery link ~/companies/my-first-company --repo-id my-project
 
 # File a ticket, either for your CoS session ("cos") or a hired agent.
 livery ticket new --title "Draft the homepage copy" --assignee cos

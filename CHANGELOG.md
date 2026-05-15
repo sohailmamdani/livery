@@ -4,7 +4,11 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
-(none — see 0.10.1 below)
+### Added
+- Linked project repos. `livery link <workspace>` writes `.livery-link.toml` in a project repo so commands run from that repo operate on the linked workspace. `livery where` shows whether the current directory resolved through a workspace marker, linked repo marker, or legacy marker.
+
+### Changed
+- Workspace guidance now frames the boundary as an operational context rather than strictly "one company, not one project." Multi-repo operations should share a workspace; isolated one-off projects may have their own.
 
 ## 0.10.1 — 2026-05-15
 
