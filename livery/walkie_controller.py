@@ -31,6 +31,7 @@ config) is read from the workspace via existing primitives.
 
 from __future__ import annotations
 
+import os
 import signal
 import subprocess
 import time
@@ -50,10 +51,11 @@ from .attempts import (
 from .config import load as load_config
 from .dispatch import prepare_walkie_turn
 from .dispatch_hooks import get_hook_command, run_post_run_hook, run_pre_run_hook
-from .walkie import ControllerStep, decide_next_peer, parse_walkie
+from .walkie import ControllerStep, WalkieFile, decide_next_peer, parse_walkie
 
 DEFAULT_TURN_TIMEOUT_SECONDS = 600
 DEFAULT_MAX_TURNS = 20
+PROCESS_SHUTDOWN_GRACE_SECONDS = 5
 
 
 @dataclass(slots=True)
@@ -80,8 +82,50 @@ def _read_ticket_markdown(workspace_root: Path, ticket_id: str | None) -> str | 
         return None
     candidate = workspace_root / "tickets" / f"{ticket_id}.md"
     if not candidate.is_file():
-        return None
+        raise FileNotFoundError(f"ticket not found for walkie: {candidate}")
     return candidate.read_text()
+
+
+def _terminate_process_group(proc: subprocess.Popen, log: Callable[[str], None]) -> None:
+    """Best-effort shutdown for a shell-launched runtime process group."""
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except OSError as e:
+        log(f"[walkie] failed to terminate process group {proc.pid}: {e}")
+        return
+
+    deadline = time.monotonic() + PROCESS_SHUTDOWN_GRACE_SECONDS
+    while time.monotonic() < deadline:
+        try:
+            done = proc.poll() is not None
+        except AttributeError:
+            return
+        if done:
+            return
+        time.sleep(0.1)
+
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    except OSError as e:
+        log(f"[walkie] failed to kill process group {proc.pid}: {e}")
+
+
+def _walkie_advanced_exactly_once(
+    *,
+    before_turn_count: int,
+    after: WalkieFile,
+    expected_peer: str,
+    expected_turn_n: int,
+) -> bool:
+    """The controller accepts only the one turn it dispatched."""
+    if len(after.turns) != before_turn_count + 1:
+        return False
+    appended = after.turns[-1]
+    return appended.n == expected_turn_n and appended.peer == expected_peer
 
 
 def controller_step(
@@ -141,21 +185,34 @@ def controller_step(
                 advanced=False, locked_after=False,
             )
 
-    # Spawn the runtime as a shell subprocess (same pattern as the
-    # existing `dispatch ... --run` path).
-    proc = subprocess.Popen(prep.command, shell=True)  # noqa: S602 — command is from build_runtime_command
+    # Spawn the runtime as its own process group. That lets Ctrl+C hit the
+    # controller without also SIGINTing the child, and lets timeout cleanup
+    # stop the whole shell/runtime tree.
+    proc = subprocess.Popen(  # noqa: S602 — command is from build_runtime_command
+        prep.command,
+        shell=True,
+        start_new_session=True,
+    )
     _log(f"[walkie] turn {turn_n}: pid={proc.pid}")
 
     if prep.attempt_path:
         attempt = load_attempt(prep.attempt_path)
         mark_running(attempt, pid=proc.pid, workspace_root=workspace_root)
 
+    interrupted = False
     try:
         rc = proc.wait(timeout=turn_timeout_seconds)
+    except KeyboardInterrupt:
+        interrupted = True
+        _log(f"[walkie] turn {turn_n}: interrupted; waiting for in-flight turn to finish")
+        rc = proc.wait()
     except subprocess.TimeoutExpired:
         _log(f"[walkie] turn {turn_n}: timeout after {turn_timeout_seconds}s — killing")
-        proc.kill()
-        proc.wait()
+        _terminate_process_group(proc, _log)
+        try:
+            proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
         rc = 124  # POSIX-ish timeout exit
 
     if prep.attempt_path:
@@ -186,22 +243,30 @@ def controller_step(
 
     # Confirm the file advanced.
     walkie_after = parse_walkie(walkie_path)
-    advanced = walkie_after.next_turn_n > walkie_before.next_turn_n
+    advanced = _walkie_advanced_exactly_once(
+        before_turn_count=len(walkie_before.turns),
+        after=walkie_after,
+        expected_peer=peer,
+        expected_turn_n=turn_n,
+    )
     locked_after = walkie_after.is_locked
 
     if not advanced:
         _log(
-            f"[walkie] turn {turn_n}: peer {peer} did NOT append a turn "
-            f"(exit_code={rc}). Treating as stall."
+            f"[walkie] turn {turn_n}: peer {peer} did not append exactly "
+            f"the expected turn (exit_code={rc}). Treating as stall."
         )
     else:
         _log(f"[walkie] turn {turn_n}: appended; locked={locked_after}")
 
-    return ControllerStep(
+    step = ControllerStep(
         peer=peer, turn_n=turn_n,
         attempt_id=prep.attempt_id, exit_code=rc,
         advanced=advanced, locked_after=locked_after,
     )
+    if interrupted:
+        raise KeyboardInterrupt
+    return step
 
 
 def run_controller(
@@ -224,11 +289,16 @@ def run_controller(
     result = ControllerResult(walkie_path=walkie_path)
 
     walkie = parse_walkie(walkie_path)
-    if not walkie.declared_peers or len(walkie.declared_peers) < 2:
+    if not walkie.declared_peers or len(walkie.declared_peers) != 2:
         raise ValueError(
-            f"walkie {walkie_path} has no `peers` in frontmatter; "
-            f"auto-mode needs at least two declared peers. Recreate the "
+            f"walkie {walkie_path} must have exactly two `peers` in frontmatter; "
+            f"auto-mode needs exactly two declared peers. Recreate the "
             f"walkie with `livery walkie auto`."
+        )
+    if len(set(walkie.declared_peers)) != len(walkie.declared_peers):
+        raise ValueError(
+            f"walkie {walkie_path} has duplicate peers in frontmatter; "
+            f"auto-mode needs two distinct peers."
         )
 
     ticket_md = _read_ticket_markdown(workspace_root, walkie.ticket_id)

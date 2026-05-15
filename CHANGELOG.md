@@ -4,7 +4,15 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
-(none — see 0.10.0 below)
+(none — see 0.10.1 below)
+
+## 0.10.1 — 2026-05-15
+
+### Fixed
+- `livery walkie auto <topic> --resume` no longer requires `--peer-a` / `--peer-b`; resumed walkies read their declared peers from the walkie file frontmatter.
+- `livery walkie auto --ticket <query>` now resolves the ticket before creating the walkie and fails clearly if it cannot find one.
+- Walkie auto turns now count as successful advancement only when the dispatched peer appends exactly the expected turn number. Wrong-peer, wrong-number, and multi-turn appends are treated as stalls.
+- Walkie auto timeouts now terminate the launched runtime process group, and Ctrl+C waits for the in-flight turn to finish before surfacing the abort.
 
 ## 0.10.0 — 2026-05-13
 

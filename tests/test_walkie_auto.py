@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import frontmatter
 import pytest
+from typer.testing import CliRunner
 
 from livery.dispatch import (
     compose_walkie_prompt,
     prepare_walkie_turn,
 )
+from livery.cli import app
 
 
 def _make_workspace_with_peers(tmp_path: Path) -> Path:
@@ -214,7 +217,7 @@ def test_controller_step_calls_runtime_and_detects_advance(tmp_path, monkeypatch
 
     next_turn_state = {"n": 1, "peer": "proposer"}
 
-    def fake_popen(cmd, shell=True):
+    def fake_popen(cmd, shell=True, start_new_session=False):
         proc = _FakeProc(next_turn_state["peer"], next_turn_state["n"])
         return proc
 
@@ -335,3 +338,192 @@ def test_controller_requires_declared_peers(tmp_path):
     with pytest.raises(ValueError) as ei:
         wc.run_controller(workspace_root=root, walkie_path=walkie_path)
     assert "peers" in str(ei.value)
+
+
+def test_controller_rejects_wrong_peer_turn(tmp_path, monkeypatch):
+    """A runtime must append exactly the expected peer's turn."""
+    from livery import walkie_controller as wc
+
+    root = _make_workspace_with_peers(tmp_path)
+    walkie_path = _seed_auto_walkie(root)
+
+    class _WrongPeerProc:
+        pid = 99995
+        def wait(self, timeout=None):
+            _append_turn_to_walkie(walkie_path, peer="critic", n=1)
+            return 0
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(wc.subprocess, "Popen", lambda *a, **kw: _WrongPeerProc())
+
+    step = wc.controller_step(
+        workspace_root=root,
+        walkie_path=walkie_path,
+        declared_peers=["proposer", "critic"],
+        briefing=None,
+        ticket_md=None,
+    )
+    assert step.advanced is False
+
+
+def test_controller_rejects_multiple_appended_turns(tmp_path, monkeypatch):
+    """One dispatch is allowed to add one turn, not run both sides."""
+    from livery import walkie_controller as wc
+
+    root = _make_workspace_with_peers(tmp_path)
+    walkie_path = _seed_auto_walkie(root)
+
+    class _DoubleTurnProc:
+        pid = 99994
+        def wait(self, timeout=None):
+            _append_turn_to_walkie(walkie_path, peer="proposer", n=1)
+            _append_turn_to_walkie(walkie_path, peer="critic", n=2)
+            return 0
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(wc.subprocess, "Popen", lambda *a, **kw: _DoubleTurnProc())
+
+    step = wc.controller_step(
+        workspace_root=root,
+        walkie_path=walkie_path,
+        declared_peers=["proposer", "critic"],
+        briefing=None,
+        ticket_md=None,
+    )
+    assert step.advanced is False
+
+
+def test_timeout_kills_process_group(tmp_path, monkeypatch):
+    """Timeouts should stop the whole runtime process group, not just mark stale."""
+    import subprocess as real_sub
+    from livery import walkie_controller as wc
+
+    root = _make_workspace_with_peers(tmp_path)
+    walkie_path = _seed_auto_walkie(root)
+    killed: dict[str, object] = {}
+
+    class _TimeoutProc:
+        pid = 43210
+        def wait(self, timeout=None):
+            raise real_sub.TimeoutExpired("cmd", timeout)
+
+    monkeypatch.setattr(wc.subprocess, "Popen", lambda *a, **kw: _TimeoutProc())
+
+    def fake_killpg(pid, sig):
+        killed["pid"] = pid
+        killed["sig"] = sig
+
+    monkeypatch.setattr(wc.os, "killpg", fake_killpg)
+    monkeypatch.setattr(wc.time, "sleep", lambda _seconds: None)
+
+    step = wc.controller_step(
+        workspace_root=root,
+        walkie_path=walkie_path,
+        declared_peers=["proposer", "critic"],
+        briefing=None,
+        ticket_md=None,
+        turn_timeout_seconds=1,
+    )
+    assert step.exit_code == 124
+    assert killed["pid"] == 43210
+
+
+def test_keyboard_interrupt_waits_for_turn_and_marks_attempt(tmp_path, monkeypatch):
+    """Ctrl+C should not leave the just-launched attempt stuck as running."""
+    from livery import walkie_controller as wc
+    from livery.attempts import AttemptStatus, list_attempts
+    from livery.walkie import parse_walkie
+
+    root = _make_workspace_with_peers(tmp_path)
+    walkie_path = _seed_auto_walkie(root)
+
+    class _InterruptedProc:
+        pid = 99993
+        def __init__(self):
+            self._first_wait = True
+        def wait(self, timeout=None):
+            if self._first_wait:
+                self._first_wait = False
+                raise KeyboardInterrupt()
+            _append_turn_to_walkie(walkie_path, peer="proposer", n=1)
+            return 0
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(wc.subprocess, "Popen", lambda *a, **kw: _InterruptedProc())
+
+    with pytest.raises(KeyboardInterrupt):
+        wc.controller_step(
+            workspace_root=root,
+            walkie_path=walkie_path,
+            declared_peers=["proposer", "critic"],
+            briefing=None,
+            ticket_md=None,
+        )
+
+    assert len(parse_walkie(walkie_path).turns) == 1
+    attempts = list_attempts(root)
+    assert len(attempts) == 1
+    assert attempts[0].status == AttemptStatus.SUCCEEDED
+
+
+def test_walkie_auto_resume_does_not_require_peer_options(tmp_path, monkeypatch):
+    from livery.walkie import new_walkie
+    from livery.walkie_controller import ControllerResult
+
+    root = _make_workspace_with_peers(tmp_path)
+    walkie_path = new_walkie(
+        workspace_root=root,
+        topic="resume-me",
+        peers=["proposer", "critic"],
+    )
+    called: dict[str, object] = {}
+
+    def fake_run_controller(**kwargs):
+        called.update(kwargs)
+        return ControllerResult(
+            walkie_path=kwargs["walkie_path"],
+            locked=True,
+            stopped_reason="already locked",
+        )
+
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    with patch("livery.walkie_controller.run_controller", side_effect=fake_run_controller):
+        result = runner.invoke(app, ["walkie", "auto", "resume-me", "--resume"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert called["walkie_path"] == walkie_path
+
+
+def test_walkie_auto_requires_peers_when_not_resuming(tmp_path, monkeypatch):
+    root = _make_workspace_with_peers(tmp_path)
+    monkeypatch.chdir(root)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["walkie", "auto", "new-topic"])
+
+    assert result.exit_code == 1
+    assert "--peer-a and --peer-b are required" in (result.stdout + result.stderr)
+
+
+def test_walkie_auto_rejects_missing_ticket_before_creating_file(tmp_path, monkeypatch):
+    root = _make_workspace_with_peers(tmp_path)
+    monkeypatch.chdir(root)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "walkie", "auto", "topic",
+            "--peer-a", "proposer",
+            "--peer-b", "critic",
+            "--ticket", "missing-ticket",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "No ticket matching" in (result.stdout + result.stderr)
+    assert not (root / "walkie-talkie" / "topic.md").exists()

@@ -1324,8 +1324,16 @@ def walkie_new(
 @walkie_app.command("auto")
 def walkie_auto(
     topic: str = typer.Argument(..., help="Short topic name (slugified for the filename)."),
-    peer_a: str = typer.Option(..., "--peer-a", help="Hired agent id for the first peer (e.g. 'proposer')."),
-    peer_b: str = typer.Option(..., "--peer-b", help="Hired agent id for the second peer (e.g. 'critic')."),
+    peer_a: str | None = typer.Option(
+        None,
+        "--peer-a",
+        help="Hired agent id for the first peer (e.g. 'proposer'). Required unless --resume is used.",
+    ),
+    peer_b: str | None = typer.Option(
+        None,
+        "--peer-b",
+        help="Hired agent id for the second peer (e.g. 'critic'). Required unless --resume is used.",
+    ),
     briefing: str | None = typer.Option(None, "--briefing", help="Briefing text. Prefix with @ to read from a file (e.g. '@brief.md')."),
     ticket: str | None = typer.Option(None, "--ticket", help="Optional ticket id holding the canonical question. Its markdown is embedded in each turn."),
     max_turns: int = typer.Option(20, "--max-turns", help="Stop after this many turns even if not locked."),
@@ -1375,6 +1383,18 @@ def walkie_auto(
             raise typer.Exit(1)
         typer.echo(f"Resuming walkie at {walkie_path}")
     else:
+        if not peer_a or not peer_b:
+            typer.echo("--peer-a and --peer-b are required unless --resume is used.", err=True)
+            raise typer.Exit(1)
+        if peer_a == peer_b:
+            typer.echo("--peer-a and --peer-b must be two different hired agents.", err=True)
+            raise typer.Exit(1)
+
+        ticket_id = ticket
+        if ticket:
+            ticket_path = _find_ticket(root, ticket)
+            ticket_id = ticket_path.stem
+
         # Verify both peers are hired agents before creating anything.
         for p in (peer_a, peer_b):
             agent_dir = root / "agents" / p
@@ -1391,15 +1411,15 @@ def walkie_auto(
                 topic=topic,
                 briefing=briefing_text,
                 peers=[peer_a, peer_b],
-                ticket_id=ticket,
+                ticket_id=ticket_id,
             )
         except FileExistsError as e:
             typer.echo(f"{e}\nUse --resume to continue the existing walkie.", err=True)
             raise typer.Exit(1)
         typer.echo(f"Created walkie: {walkie_path}")
         typer.echo(f"  peers: {peer_a} ↔ {peer_b}")
-        if ticket:
-            typer.echo(f"  ticket: {ticket} (embedded in every turn)")
+        if ticket_id:
+            typer.echo(f"  ticket: {ticket_id} (embedded in every turn)")
         if briefing_text:
             typer.echo(f"  briefing: {len(briefing_text)} chars (in walkie body)")
 
@@ -1416,6 +1436,9 @@ def walkie_auto(
             turn_timeout_seconds=turn_timeout,
             log=lambda msg: typer.echo(msg),
         )
+    except (ValueError, FileNotFoundError) as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
     except KeyboardInterrupt:
         typer.echo("\nAborted by operator. Walkie file preserved; resume with --resume.", err=True)
         raise typer.Exit(130)
