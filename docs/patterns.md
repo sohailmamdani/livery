@@ -33,11 +33,14 @@ Livery is usually operated through a CoS session, not by a human memorizing ever
 ```sh
 livery next
 livery capabilities
+livery session-brief
 ```
 
 `livery next` looks at the current directory and suggests what matters now: initialize, link, hire, file a ticket, review status, migrate an accidental in-repo workspace, and so on. `livery capabilities` prints the full feature menu grouped by job.
 
-Both commands accept `--format json`. CoS agents should use that structured output when they need to reason about available Livery features or advise another agent. The managed workspace convention block points agents at these commands so they do not have to rely on memory of whichever Livery version they last saw.
+These commands accept `--format json`. CoS agents should use that structured output when they need to reason about available Livery features or advise another agent. The managed workspace convention block points agents at these commands so they do not have to rely on memory of whichever Livery version they last saw.
+
+For Codex and Claude Code, `livery install-agent-hooks` installs a local `SessionStart` hook that injects `livery session-brief` automatically. The brief tells the CoS whether it is in the workspace itself or a linked repo, includes a compact status summary, and instructs it to acknowledge that context to the user at the start of the session.
 
 ### Linked project repos
 

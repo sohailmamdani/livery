@@ -4,6 +4,9 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Added
+- CoS startup brief hooks. `livery session-brief` emits a concise Livery-aware startup payload with workspace/link resolution, brief status, and an instruction for the CoS to acknowledge the detected workspace or linked repo to the user. `livery install-agent-hooks` installs Codex and Claude Code `SessionStart` hooks that inject that brief per workspace or linked repo.
+
 ## 0.11.1 — 2026-05-16
 
 ### Changed

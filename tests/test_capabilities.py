@@ -17,6 +17,7 @@ def test_capabilities_text_lists_feature_groups():
     assert "Connect repos" in result.stdout
     assert "livery link <workspace> --repo-id <repo>" in result.stdout
     assert "livery next --format json" in result.stdout
+    assert "livery install-agent-hooks" in result.stdout
     assert "livery telegram register-commands" in result.stdout
 
 
@@ -73,6 +74,40 @@ def test_next_json_in_linked_repo_reports_resolution(tmp_path, monkeypatch):
     assert any(item["command"] == "livery where" for item in parsed["suggestions"])
 
 
+def test_session_brief_text_instructs_agent_to_acknowledge_workspace(tmp_path, monkeypatch):
+    workspace = tmp_path / "acme-livery"
+    init_workspace(target=workspace, name="acme")
+    monkeypatch.chdir(workspace)
+
+    result = CliRunner().invoke(app, ["session-brief"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "# Livery session brief" in result.stdout
+    assert "Livery-aware: yes" in result.stdout
+    assert f"Workspace: {workspace}" in result.stdout
+    assert "Briefly tell the user that this is a Livery workspace" in result.stdout
+    assert "Use `livery next --format json`" in result.stdout
+
+
+def test_session_brief_json_in_linked_repo_reports_status_and_instruction(tmp_path, monkeypatch):
+    workspace = tmp_path / "acme-livery"
+    init_workspace(target=workspace, name="acme")
+    repo = tmp_path / "acme-api"
+    repo.mkdir()
+    write_link(repo_root=repo, workspace_root=workspace, repo_id="api")
+    monkeypatch.chdir(repo)
+
+    result = CliRunner().invoke(app, ["session-brief", "--format", "json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    parsed = json.loads(result.stdout)
+    assert parsed["is_livery_aware"] is True
+    assert parsed["resolution"]["kind"] == "linked-repo"
+    assert parsed["resolution"]["workspace_root"] == str(workspace)
+    assert parsed["status"]["workspace_root"] == str(workspace)
+    assert "Livery linked repo" in parsed["agent_instruction"]
+
+
 def test_next_legacy_resolution_does_not_suggest_workspace_work(tmp_path, monkeypatch):
     legacy = tmp_path / "framework-repo"
     legacy.mkdir()
@@ -106,3 +141,4 @@ def test_managed_cos_block_points_agents_to_discovery(tmp_path):
     assert "## Discoverability" in content
     assert "livery next --format json" in content
     assert "livery capabilities --format json" in content
+    assert "livery session-brief" in content

@@ -158,6 +158,7 @@ def compute_status(
     stale_days: int = DEFAULT_STALE_DAYS,
     recent_closed_limit: int | None = DEFAULT_RECENT_CLOSED_LIMIT,
     workspace_name: str | None = None,
+    include_runtime_health: bool = True,
 ) -> StatusReport:
     """Build a StatusReport for the workspace at `root`. Pure: no UI."""
     tickets = _load_tickets(root)
@@ -186,9 +187,13 @@ def compute_status(
     else:
         recently_closed = closed_sorted
 
-    runtime_report = run_doctor(workspace_root=None)
-    runtimes_ok = sum(1 for r in runtime_report.runtimes if r.ok)
-    runtimes_total = len(runtime_report.runtimes)
+    if include_runtime_health:
+        runtime_report = run_doctor(workspace_root=None)
+        runtimes_ok = sum(1 for r in runtime_report.runtimes if r.ok)
+        runtimes_total = len(runtime_report.runtimes)
+    else:
+        runtimes_ok = 0
+        runtimes_total = 0
 
     return StatusReport(
         workspace_name=workspace_name or root.name,

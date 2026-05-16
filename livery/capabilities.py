@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .paths import WORKSPACE_MARKER, WorkspaceResolution, resolve_workspace
+from .status import (
+    DEFAULT_RECENT_CLOSED_LIMIT,
+    DEFAULT_STALE_DAYS,
+    StatusReport,
+    compute_status,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +42,12 @@ CAPABILITIES: tuple[Capability, ...] = (
         group="Understand the current context",
         title="Ask Livery what is available from here",
         summary="Show the active workspace resolution and the most relevant next actions.",
-        commands=("livery next", "livery capabilities", "livery where"),
+        commands=(
+            "livery next",
+            "livery session-brief",
+            "livery capabilities",
+            "livery where",
+        ),
         when="Use at the start of a CoS session or whenever the user asks what Livery can do.",
         agent_note="Run `livery next --format json` before inventing a workflow from memory.",
     ),
@@ -108,12 +120,13 @@ CAPABILITIES: tuple[Capability, ...] = (
         title="Keep conventions and notifications in sync",
         summary="Install optional hooks, sync CoS convention files, and configure Telegram commands.",
         commands=(
+            "livery install-agent-hooks",
             "livery install-hooks",
             "livery sync-cos --apply",
             "livery telegram register-commands",
         ),
-        when="Use when multiple CoS convention files may drift or Telegram is configured.",
-        agent_note="Run sync-cos after meaningful CoS convention edits when no hook is installed.",
+        when="Use when CoS sessions should start Livery-aware, convention files may drift, or Telegram is configured.",
+        agent_note="Install agent hooks per workspace or linked repo so SessionStart injects `livery session-brief`.",
     ),
 )
 
@@ -319,3 +332,181 @@ def render_next_text(start: Path | None = None) -> str:
 
 def render_next_json(start: Path | None = None) -> str:
     return json.dumps(next_steps(start), indent=2) + "\n"
+
+
+def _short_ticket_id(ticket_id: str) -> str:
+    parts = ticket_id.split("-")
+    if len(parts) >= 4 and parts[0].isdigit():
+        return "-".join(parts[:4])
+    return ticket_id
+
+
+def _status_summary(report: StatusReport) -> dict[str, object]:
+    last_commit: dict[str, object] | None = None
+    if report.last_commit is not None:
+        when, subject = report.last_commit
+        last_commit = {
+            "when": when.isoformat(),
+            "age_days": (datetime.now(timezone.utc) - when).days,
+            "subject": subject,
+        }
+    return {
+        "workspace_name": report.workspace_name,
+        "workspace_root": str(report.workspace_root),
+        "last_commit": last_commit,
+        "open_by_assignee": report.open_by_assignee,
+        "oldest_open_per_assignee": report.oldest_open_per_assignee,
+        "stale_count": len(report.stale_tickets),
+        "stale_tickets": [
+            {
+                "id": ticket.id,
+                "title": ticket.title,
+                "assignee": ticket.assignee,
+                "age_days": ticket.age_days,
+            }
+            for ticket in report.stale_tickets[:5]
+        ],
+        "blocked_count": len(report.blocked_tickets),
+        "blocked_tickets": [
+            {
+                "id": ticket.id,
+                "title": ticket.title,
+                "assignee": ticket.assignee,
+                "blocked_on": ticket.blocked_on,
+                "age_days": ticket.age_days,
+            }
+            for ticket in report.blocked_tickets[:5]
+        ],
+        "recently_closed": [
+            {
+                "id": ticket.id,
+                "title": ticket.title,
+                "status": ticket.status,
+            }
+            for ticket in report.recently_closed
+        ],
+        "runtimes": {
+            "ok": report.runtimes_ok,
+            "total": report.runtimes_total,
+        },
+    }
+
+
+def session_brief(start: Path | None = None) -> dict[str, object]:
+    cwd = (start or Path.cwd()).resolve()
+    try:
+        resolution = resolve_workspace(cwd)
+    except RuntimeError as e:
+        return {
+            "cwd": str(cwd),
+            "is_livery_aware": False,
+            "error": str(e),
+            "agent_instruction": (
+                "Do not claim this is a Livery workspace. If the user expected "
+                "one, suggest `livery init` or `livery link <workspace>`."
+            ),
+        }
+
+    status: dict[str, object] | None = None
+    if resolution.kind != "legacy-workspace":
+        report = compute_status(
+            resolution.workspace_root,
+            stale_days=DEFAULT_STALE_DAYS,
+            recent_closed_limit=DEFAULT_RECENT_CLOSED_LIMIT,
+            include_runtime_health=False,
+        )
+        status = _status_summary(report)
+
+    kind = resolution.kind
+    if kind == "linked-repo":
+        acknowledgement = (
+            "Briefly tell the user that this is a Livery linked repo and that "
+            f"Livery commands resolve to {resolution.workspace_root}."
+        )
+    elif kind == "workspace":
+        acknowledgement = (
+            "Briefly tell the user that this is a Livery workspace and that "
+            f"the active workspace is {resolution.workspace_root}."
+        )
+    else:
+        acknowledgement = (
+            "Briefly tell the user that this directory matched Livery's legacy "
+            "framework-repo compatibility marker, not a normal user workspace."
+        )
+
+    return {
+        "cwd": str(cwd),
+        "is_livery_aware": True,
+        "resolution": _workspace_summary(resolution),
+        "status": status,
+        "agent_instruction": acknowledgement,
+        "discovery_commands": {
+            "context": "livery next --format json",
+            "full_menu": "livery capabilities --format json",
+        },
+    }
+
+
+def render_session_brief_text(start: Path | None = None) -> str:
+    data = session_brief(start)
+    lines = ["# Livery session brief", ""]
+    lines.append(f"Cwd: {data['cwd']}")
+    if not data.get("is_livery_aware"):
+        lines.append("Livery-aware: no")
+        lines.append(f"Problem: {data.get('error')}")
+        lines.append("")
+        lines.append(f"Agent instruction: {data['agent_instruction']}")
+        return "\n".join(lines) + "\n"
+
+    resolution = data["resolution"]
+    assert isinstance(resolution, dict)
+    lines.append("Livery-aware: yes")
+    lines.append(f"Source: {resolution['kind']}")
+    lines.append(f"Workspace: {resolution['workspace_root']}")
+    if resolution.get("linked_repo_root"):
+        lines.append(f"Linked repo: {resolution['linked_repo_root']}")
+    if resolution.get("repo_id"):
+        lines.append(f"Repo id: {resolution['repo_id']}")
+    lines.extend(["", f"Agent instruction: {data['agent_instruction']}"])
+
+    status = data.get("status")
+    if isinstance(status, dict):
+        lines.extend(["", "Status:"])
+        open_by_assignee = status["open_by_assignee"]
+        if isinstance(open_by_assignee, dict) and open_by_assignee:
+            counts = ", ".join(
+                f"{assignee}: {count}" for assignee, count in open_by_assignee.items()
+            )
+            lines.append(f"- Open tickets: {counts}")
+        else:
+            lines.append("- Open tickets: none")
+        lines.append(f"- Blocked: {status['blocked_count']}")
+        lines.append(f"- Stale: {status['stale_count']}")
+        runtimes = status["runtimes"]
+        assert isinstance(runtimes, dict)
+        if runtimes["total"]:
+            lines.append(f"- Runtimes: {runtimes['ok']}/{runtimes['total']} ok")
+        else:
+            lines.append("- Runtimes: not checked in startup brief")
+        recent = status["recently_closed"]
+        if isinstance(recent, list) and recent:
+            rendered = ", ".join(
+                f"{_short_ticket_id(str(item['id']))} {item['title']}"
+                for item in recent[:3]
+                if isinstance(item, dict)
+            )
+            if rendered:
+                lines.append(f"- Recent closes: {rendered}")
+
+    lines.extend(
+        [
+            "",
+            "Use `livery next --format json` for context-aware suggestions.",
+            "Use `livery capabilities --format json` for the full feature menu.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def render_session_brief_json(start: Path | None = None) -> str:
+    return json.dumps(session_brief(start), indent=2) + "\n"

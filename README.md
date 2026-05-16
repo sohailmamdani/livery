@@ -79,6 +79,7 @@ Or use the commands directly:
 # Ask Livery what applies from wherever you are
 livery next
 livery capabilities
+livery session-brief                    # concise CoS startup context
 
 livery init                             # scaffolds CLAUDE.md + AGENTS.md by default
 # livery init --cos-engine codex        # if you'll use Codex (AGENTS.md only)
@@ -87,10 +88,12 @@ livery init                             # scaffolds CLAUDE.md + AGENTS.md by def
 # livery init --cos-engine claude_code,codex,pi   # multiple engines, comma-separated
 livery doctor                           # see which runtimes are reachable
 livery hire writer                      # hire your first agent (interactive wizard)
+livery install-agent-hooks              # make Codex / Claude Code start Livery-aware
 
 # From a project repo, point local livery commands back at this workspace
 cd ~/code/my-project
 livery link ~/companies/my-first-company --repo-id my-project
+livery install-agent-hooks              # install linked-repo startup awareness here too
 
 # If this repo was already initialized as a standalone workspace, migrate it
 # into the shared workspace while linking it.
@@ -112,7 +115,7 @@ livery ticket close <ticket-id> --summary "Shipped v1 copy."
 livery ticket close <ticket-id> --status cancelled --summary "Folded into the new schema."
 ```
 
-`livery next` and `livery capabilities` are intentionally useful to both humans and CoS agents. Add `--format json` when Codex, Claude Code, or another tool needs structured output instead of prose.
+`livery next`, `livery capabilities`, and `livery session-brief` are intentionally useful to both humans and CoS agents. Add `--format json` when Codex, Claude Code, or another tool needs structured output instead of prose. `livery install-agent-hooks` wires `session-brief` into Codex / Claude Code `SessionStart` hooks for the current workspace or linked repo.
 
 ## Workspace layout
 

@@ -9,11 +9,14 @@ from typing import Optional
 import frontmatter
 import typer
 
+from .agent_hooks import install_agent_hooks, uninstall_agent_hooks
 from .capabilities import (
     render_capabilities_json,
     render_capabilities_text,
     render_next_json,
     render_next_text,
+    render_session_brief_json,
+    render_session_brief_text,
 )
 from .dispatch import prepare_dispatch, prepare_fan_out
 from .dispatch_view import (
@@ -139,6 +142,23 @@ def next_command(
         typer.echo(render_next_json(), nl=False)
     else:
         typer.echo(render_next_text(), nl=False)
+
+
+@app.command("session-brief")
+def session_brief_cmd(
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. Text is intended for SessionStart hooks.",
+    ),
+) -> None:
+    """Print a concise startup brief for CoS agent sessions."""
+    output_format = _validate_output_format(output_format)
+    if output_format == "json":
+        typer.echo(render_session_brief_json(), nl=False)
+    else:
+        typer.echo(render_session_brief_text(), nl=False)
 
 
 def _next_counter(root: Path, today: str) -> int:
@@ -1221,6 +1241,53 @@ def install_hooks_cmd(
         typer.echo(
             "\nSome hooks weren't touched because they look user-written. "
             "Pass --force to overwrite them.",
+            err=True,
+        )
+
+
+@app.command("install-agent-hooks")
+def install_agent_hooks_cmd(
+    uninstall: bool = typer.Option(
+        False,
+        "--uninstall",
+        help="Remove Livery-managed SessionStart hooks instead of installing.",
+    ),
+    engines: str = typer.Option(
+        "codex,claude_code",
+        "--engine",
+        help="Comma-separated engines to manage: codex, claude_code.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Replace conflicting hook config where Livery can do so safely.",
+    ),
+) -> None:
+    """Install CoS SessionStart hooks that inject `livery session-brief`.
+
+    The hooks are installed in the current Livery workspace or linked repo,
+    not globally. They tell Codex / Claude Code that the directory is
+    Livery-aware, inject a concise workspace status, and instruct the CoS to
+    acknowledge the detected workspace or linked repo to the user.
+    """
+    try:
+        if uninstall:
+            results = uninstall_agent_hooks(engines=engines)
+        else:
+            results = install_agent_hooks(engines=engines, force=force)
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    for r in results:
+        typer.echo(f"  [{r.status}] {r.engine}: {r.path}")
+        if r.detail:
+            typer.echo(f"           — {r.detail}")
+
+    if any(r.status == "skipped" for r in results) and not uninstall:
+        typer.echo(
+            "\nSome agent hook files were skipped. Review the details above or pass --force "
+            "where Livery says it can safely replace the conflicting setting.",
             err=True,
         )
 

@@ -134,6 +134,10 @@ you, not the intern-compliance version.
 - When you need the full feature menu, run `livery capabilities`.
 - When acting programmatically or advising another agent, prefer structured
   output: `livery next --format json` and `livery capabilities --format json`.
+- If Livery-managed SessionStart hooks are installed, read the injected
+  `livery session-brief` carefully. It tells you whether the current directory
+  is a workspace or linked repo, includes a concise status summary, and asks
+  you to acknowledge that context to the user.
 - Treat those commands as live framework truth. Do not rely on stale memory
   or guess at hidden options.
 

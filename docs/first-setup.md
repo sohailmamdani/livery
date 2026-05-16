@@ -11,9 +11,18 @@ At any point, ask Livery what applies from your current directory:
 ```sh
 livery next
 livery capabilities
+livery session-brief
 ```
 
-Both commands also support `--format json`, which is meant for Codex, Claude Code, and other CoS agents. The managed `CLAUDE.md` / `AGENTS.md` block tells agents to consult these commands instead of guessing from stale memory.
+These commands also support `--format json`, which is meant for Codex, Claude Code, and other CoS agents. The managed `CLAUDE.md` / `AGENTS.md` block tells agents to consult these commands instead of guessing from stale memory.
+
+To make agent sessions start Livery-aware automatically, install startup hooks in the workspace:
+
+```sh
+livery install-agent-hooks
+```
+
+This adds Codex and Claude Code `SessionStart` hooks for the current workspace or linked repo. On startup, the hook injects `livery session-brief`: the active workspace/link resolution, a concise status summary, and an instruction for the CoS to acknowledge to you that it detected a Livery workspace or linked repo.
 
 ## Prerequisites
 

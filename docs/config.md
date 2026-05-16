@@ -142,6 +142,25 @@ livery link ~/work/acme-livery --repo-id api --move-existing-workspace
 
 That moves the repo's Livery scaffolding (`agents/`, `tickets/`, `.livery/`, CoS convention files, and CoS skill directories) into the linked workspace, archives the repo's old `livery.toml` at `.livery/linked-repos/<repo-id>/livery.toml` in the workspace, then writes `.livery-link.toml` in the repo. If the destination already has a different file at one of those paths, Livery stops before moving anything and prints the conflicts.
 
+## Agent startup hooks
+
+`livery install-agent-hooks` installs local CoS startup hooks in the current workspace or linked repo. It does not write global Codex or Claude Code config.
+
+For Codex, Livery writes:
+
+- `.codex/config.toml` — enables `features.codex_hooks` if Livery can do so safely.
+- `.codex/hooks.json` — adds a Livery-managed `SessionStart` hook that runs `livery session-brief --format text`.
+
+For Claude Code, Livery writes:
+
+- `.claude/settings.local.json` — adds a Livery-managed `SessionStart` hook that runs `livery session-brief --format text`.
+
+The startup brief tells the CoS whether the current directory is a workspace, linked repo, or legacy framework repo; includes concise workspace status; and instructs the CoS to acknowledge that Livery context to the user. Remove these entries with:
+
+```sh
+livery install-agent-hooks --uninstall
+```
+
 ## `tickets/<id>.md`
 
 Each ticket is a markdown file with frontmatter and three body sections (`## Description`, optional `## Context`, `## Thread`). `livery ticket new` scaffolds them; `livery ticket close` flips status and commits.
