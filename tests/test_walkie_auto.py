@@ -56,6 +56,8 @@ def test_compose_walkie_prompt_has_identity_briefing_and_task(tmp_path):
     assert "critic" in prompt
     assert "BEGIN AGENTS.md" in prompt
     assert "You push back" in prompt
+    assert "## Livery discovery" in prompt
+    assert "livery next --format json" in prompt
     # Layer 2: briefing
     assert "BEGIN BRIEFING" in prompt
     assert "should we ship option 3" in prompt

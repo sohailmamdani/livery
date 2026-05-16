@@ -4,6 +4,9 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Changed
+- Worker dispatch prompts now include a compact Livery discovery hint pointing agents at `livery next --format json` and `livery capabilities --format json`, so dispatched agents can discover the current workspace/link context even when their own `AGENTS.md` is stale.
+
 ## 0.11.0 — 2026-05-15
 
 ### Added

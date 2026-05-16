@@ -54,6 +54,9 @@ def test_compose_prompt_includes_preamble_agents_and_ticket():
     assert "acting as the \"lead-dev\" agent" in out
     assert "---BEGIN AGENTS.md---" in out
     assert "---END AGENTS.md---" in out
+    assert "## Livery discovery" in out
+    assert "livery next --format json" in out
+    assert "livery capabilities --format json" in out
     assert "---BEGIN TICKET---" in out
     assert "---END TICKET---" in out
     assert "=== DISPATCH_SUMMARY ===" in out

@@ -39,6 +39,16 @@ class DispatchPrep:
 
 PROMPT_PREAMBLE = "You are acting as the \"{assignee}\" agent in Livery. Below is your AGENTS.md (system prompt / job description) followed by the ticket you are working."
 
+WORKER_DISCOVERY_HINT = """\
+## Livery discovery
+
+If you are unsure how Livery is wired from your current working directory,
+run `livery next --format json`. If you need the full framework feature
+menu, run `livery capabilities --format json`. Treat those commands as
+live framework truth instead of relying on stale memory or guessing at
+hidden options.
+"""
+
 DISPATCH_SUMMARY_BLOCK = """\
 When the ticket is done, print a final block in this exact format:
 
@@ -63,6 +73,8 @@ def compose_prompt(*, assignee: str, agents_md: str, ticket_md: str, ticket_id: 
         agents_md.rstrip(),
         "",
         "---END AGENTS.md---",
+        "",
+        WORKER_DISCOVERY_HINT.rstrip(),
         "",
         DISPATCH_SUMMARY_BLOCK.format(ticket_id=ticket_id).rstrip(),
         "",
@@ -419,6 +431,8 @@ def compose_walkie_prompt(
         agents_md.rstrip(),
         "",
         "---END AGENTS.md---",
+        "",
+        WORKER_DISCOVERY_HINT.rstrip(),
         "",
     ]
     if briefing:
