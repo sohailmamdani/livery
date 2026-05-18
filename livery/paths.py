@@ -23,6 +23,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .cos_engines import find_managed_block
 from .paths_safety import sanitize_path_component
 
 WORKSPACE_MARKER = "livery.toml"
@@ -33,6 +34,8 @@ WORKSPACE_ARTIFACTS = (
     ".livery",
     ".claude",
     ".agents",
+)
+CONVENTION_ARTIFACTS = (
     "CLAUDE.md",
     "AGENTS.md",
 )
@@ -57,6 +60,7 @@ class WorkspaceMoveResult:
 
     moved: list[tuple[Path, Path]] = field(default_factory=list)
     removed: list[Path] = field(default_factory=list)
+    preserved_conventions: list[Path] = field(default_factory=list)
     preserved_config: Path | None = None
 
 
@@ -236,6 +240,61 @@ def _merge_move(src: Path, dst: Path, result: WorkspaceMoveResult) -> None:
     raise RuntimeError(f"Cannot move {src} to {dst}: destination already exists")
 
 
+def _is_bare_convention_template(content: str) -> bool:
+    """Whether stripped convention content is just Livery's empty scaffold."""
+    lines = [line.strip() for line in content.splitlines() if line.strip()]
+    if not lines:
+        return True
+
+    # The title is the workspace/repo name from scaffold time; ignore it when
+    # deciding whether the rest of the file contains real repo instructions.
+    if lines and lines[0].startswith("# "):
+        lines = lines[1:]
+
+    scaffold_lines = {
+        "## About",
+        "(Describe your workspace here.)",
+        "## Agents",
+        "_No agents hired yet. Run `livery hire <role>` to scaffold one._",
+        "## Custom conventions for the CoS (you)",
+        "_Add workspace-specific rules here.",
+        "_Add workspace-specific rules here. Examples: domain conventions, paired",
+        "repos, style preferences, escalation paths. Anything you write here is",
+        "yours — Livery's `upgrade-workspace` command will not touch this section._",
+        "repos, style preferences, escalation paths._",
+    }
+    return all(line in scaffold_lines for line in lines)
+
+
+def _preserve_repo_convention(path: Path, result: WorkspaceMoveResult) -> None:
+    """Remove Livery's workspace-managed block from a repo convention file.
+
+    When converting an accidental in-repo workspace into a linked repo, the
+    repo's top-level `CLAUDE.md` / `AGENTS.md` is repo-local context. It should
+    not be moved into the parent workspace. If stripping Livery's managed block
+    leaves only the empty scaffold, remove the file; otherwise leave the
+    repo-specific content in place.
+    """
+    if not path.is_file():
+        return
+
+    old = path.read_text()
+    block_range = find_managed_block(old)
+    new = old
+    if block_range is not None:
+        start, end = block_range
+        new = old[:start] + old[end:]
+
+    if block_range is not None and _is_bare_convention_template(new):
+        path.unlink()
+        result.removed.append(path)
+        return
+
+    if new != old:
+        path.write_text(new.strip() + "\n")
+    result.preserved_conventions.append(path)
+
+
 def move_existing_workspace_to_link(
     *,
     repo_root: Path,
@@ -293,6 +352,8 @@ def move_existing_workspace_to_link(
         )
 
     result = WorkspaceMoveResult()
+    for name in CONVENTION_ARTIFACTS:
+        _preserve_repo_convention(repo_root / name, result)
     for name in WORKSPACE_ARTIFACTS:
         _merge_move(repo_root / name, workspace_root / name, result)
 

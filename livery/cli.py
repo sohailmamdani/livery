@@ -976,6 +976,10 @@ def link_repo(
         typer.echo(f"Repo id:          {repo_id}")
     if move_result:
         typer.echo(f"Moved items:      {len(move_result.moved)}")
+        if move_result.preserved_conventions:
+            typer.echo(
+                f"Repo conventions: preserved {len(move_result.preserved_conventions)}"
+            )
         if move_result.preserved_config:
             typer.echo(f"Old config:       {move_result.preserved_config}")
     if excluded:

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from livery.cos_engines import wrap_managed
 from livery.cli import app
 from livery.paths import (
     LINK_MARKER,
@@ -133,7 +134,7 @@ def test_move_existing_workspace_to_parent_then_link(tmp_path):
     assert not (repo / "livery.toml").exists()
     assert not (repo / "tickets").exists()
     assert not (repo / "agents").exists()
-    assert not (repo / "CLAUDE.md").exists()
+    assert (repo / "CLAUDE.md").read_text() == "# Repo CoS\n"
     assert (repo / LINK_MARKER).exists()
     assert (
         (workspace / "tickets" / "2026-05-15-001-fix-auth.md").read_text()
@@ -148,6 +149,100 @@ def test_move_existing_workspace_to_parent_then_link(tmp_path):
     )
     assert result.preserved_config.read_text() == 'name = "repo-local"\n'
     assert find_root(repo) == workspace
+
+
+def test_move_existing_workspace_preserves_repo_convention_content(tmp_path):
+    workspace = _make_workspace(tmp_path)
+    (workspace / "CLAUDE.md").write_text("# Workspace CoS\n")
+    (workspace / "AGENTS.md").write_text("# Workspace Codex CoS\n")
+    repo = _make_repo(tmp_path)
+    (repo / "livery.toml").write_text('name = "repo-local"\n')
+    (repo / "tickets").mkdir()
+    (repo / "tickets" / "2026-05-15-001-fix-auth.md").write_text("ticket\n")
+    (repo / "agents").mkdir()
+    (repo / "CLAUDE.md").write_text(
+        wrap_managed("# Managed Livery block\n")
+        + "\n# Playground repo\n\nJira conventions and scripts live here.\n"
+    )
+
+    result = move_existing_workspace_to_link(
+        repo_root=repo,
+        workspace_root=workspace,
+        repo_id="playground",
+    )
+
+    assert (workspace / "CLAUDE.md").read_text() == "# Workspace CoS\n"
+    assert (workspace / "AGENTS.md").read_text() == "# Workspace Codex CoS\n"
+    assert not (repo / "livery.toml").exists()
+    assert not (repo / "tickets").exists()
+    assert not (repo / "agents").exists()
+    assert (repo / "CLAUDE.md").read_text() == (
+        "# Playground repo\n\nJira conventions and scripts live here.\n"
+    )
+    assert repo / "CLAUDE.md" in result.preserved_conventions
+    assert (workspace / "tickets" / "2026-05-15-001-fix-auth.md").exists()
+
+
+def test_move_existing_workspace_removes_bare_repo_convention_template(tmp_path):
+    workspace = _make_workspace(tmp_path)
+    (workspace / "AGENTS.md").write_text("# Workspace Codex CoS\n")
+    repo = _make_repo(tmp_path)
+    (repo / "livery.toml").write_text('name = "repo-local"\n')
+    (repo / "tickets").mkdir()
+    (repo / "agents").mkdir()
+    (repo / "AGENTS.md").write_text(
+        wrap_managed("# Managed Livery block\n")
+        + "\n# playground\n\n"
+        + "## About\n\n"
+        + "(Describe your workspace here.)\n\n"
+        + "## Agents\n\n"
+        + "_No agents hired yet. Run `livery hire <role>` to scaffold one._\n\n"
+        + "## Custom conventions for the CoS (you)\n\n"
+        + "_Add workspace-specific rules here. Examples: domain conventions, "
+        + "paired\nrepos, style preferences, escalation paths._\n"
+    )
+
+    result = move_existing_workspace_to_link(
+        repo_root=repo,
+        workspace_root=workspace,
+        repo_id="playground",
+    )
+
+    assert not (repo / "AGENTS.md").exists()
+    assert repo / "AGENTS.md" in result.removed
+    assert (workspace / "AGENTS.md").read_text() == "# Workspace Codex CoS\n"
+
+
+def test_move_existing_workspace_keeps_template_with_custom_repo_notes(tmp_path):
+    workspace = _make_workspace(tmp_path)
+    (workspace / "AGENTS.md").write_text("# Workspace Codex CoS\n")
+    repo = _make_repo(tmp_path)
+    (repo / "livery.toml").write_text('name = "repo-local"\n')
+    (repo / "tickets").mkdir()
+    (repo / "agents").mkdir()
+    (repo / "AGENTS.md").write_text(
+        wrap_managed("# Managed Livery block\n")
+        + "\n# playground\n\n"
+        + "## About\n\n"
+        + "(Describe your workspace here.)\n\n"
+        + "## Agents\n\n"
+        + "_No agents hired yet. Run `livery hire <role>` to scaffold one._\n\n"
+        + "## Custom conventions for the CoS (you)\n\n"
+        + "_Add workspace-specific rules here.\n\n"
+        + "## Repo scripts\n\n"
+        + "Run `make smoke` before merging.\n"
+    )
+
+    result = move_existing_workspace_to_link(
+        repo_root=repo,
+        workspace_root=workspace,
+        repo_id="playground",
+    )
+
+    assert (repo / "AGENTS.md").exists()
+    assert "LIVERY-MANAGED" not in (repo / "AGENTS.md").read_text()
+    assert "Run `make smoke` before merging." in (repo / "AGENTS.md").read_text()
+    assert repo / "AGENTS.md" in result.preserved_conventions
 
 
 def test_move_existing_workspace_refuses_conflicts_without_moving(tmp_path):
