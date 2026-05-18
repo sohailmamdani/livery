@@ -13,10 +13,14 @@ Tech-savvy operators (not necessarily programmers) who want an AI workforce on t
 ## What Livery gives you
 
 - A **workspace** (a directory with `agents/`, `tickets/`, config) that becomes your CoS's operating context.
+- **Linked project repos** so you can run `livery` commands from source repos while keeping one shared workspace/backlog.
 - A **CLI** for hiring agents, filing tickets, dispatching work to agents, closing the loop.
 - **Runtime adapters** so agents can live on different stacks: Claude Code CLI, Codex CLI, Cursor, LM Studio, Ollama. Adding a new adapter is ~30 lines of Python.
+- **Durable dispatch attempts** under `.livery/dispatch/attempts/`, with status, PID, failures, hook outcomes, prompt path, and output path recorded per run.
+- **Walkie-Talkie** for structured AI-to-AI debate, either manual append-only transcripts or automated alternating dispatches between two hired agents.
+- **Discoverability commands and startup hooks** so CoS sessions can ask Livery what applies from the current directory instead of guessing from stale docs.
 - **Telegram integration** — close a ticket, get a ping.
-- **Slash commands and skills** for the Claude Code session that runs your workspace (the "Chief of Staff").
+- **CoS convention files** for Claude Code, Codex, Pi, and OpenCode, plus slash commands and skills where those engines support them.
 
 ## Status
 
@@ -119,7 +123,7 @@ livery ticket close <ticket-id> --status cancelled --summary "Folded into the ne
 
 ## Workspace layout
 
-After `livery init` (default `--cos-engine both`):
+A typical workspace looks like this. `livery init` creates the core scaffold; runtime state directories such as `.livery/` and `walkie-talkie/` appear on first use.
 
 ```
 my-workspace/
@@ -128,14 +132,21 @@ my-workspace/
 ├── AGENTS.md                                  # CoS conventions (Codex reads this) — same content as CLAUDE.md
 ├── agents/                                    # one dir per hired agent (Livery)
 ├── tickets/                                   # one markdown per ticket
+├── walkie-talkie/                             # append-only AI-to-AI debate transcripts, created on first use
+├── .livery/                                   # ignored runtime state: dispatch attempts, hook logs, walkie prompts
 ├── .claude/                                   # Claude Code's skill discovery dir
 │   ├── commands/ticket.md                     # /ticket slash command
-│   └── skills/new-ticket/SKILL.md
+│   ├── commands/walkie.md                     # /walkie slash command
+│   └── skills/
+│       ├── new-ticket/SKILL.md
+│       └── walkie-talkie/SKILL.md
 └── .agents/                                   # Codex's skill discovery dir (.agents/skills)
-    └── skills/new-ticket/SKILL.md
+    └── skills/
+        ├── new-ticket/SKILL.md
+        └── walkie-talkie/SKILL.md
 ```
 
-`CLAUDE.md` and `AGENTS.md` are the same file with different names — one for each engine's convention. Same with the `new-ticket` skill: it lives in `.claude/skills/` for Claude Code and `.agents/skills/` for Codex (Codex's convention path). `--cos-engine claude_code` skips the `.agents/` directory; `--cos-engine codex` skips `.claude/`.
+`CLAUDE.md` and `AGENTS.md` are the same content with different names — one for each engine's convention. Same with shipped skills: they live in `.claude/skills/` for Claude Code and `.agents/skills/` for Codex. `--cos-engine claude_code` skips the `.agents/` directory; `--cos-engine codex` skips `.claude/`. `--cos-engine pi` and `--cos-engine opencode` scaffold their `AGENTS.md`-style convention files without Claude/Codex-specific skill directories.
 
 ## Configuration (`livery.toml`)
 
@@ -144,10 +155,16 @@ name = "my-workspace"
 description = "What this workspace is for"
 
 default_runtime = "claude_code"   # optional; used for some subcommands
+cos_engines = ["claude_code", "codex"]  # optional; which CoS scaffolding Livery manages
 
 [telegram]
 chat_id = "-1001234567890"                           # group or DM id
 token_file = "~/.claude/channels/telegram/.env"       # optional; defaults here
+
+[dispatch_hooks]
+after_worktree_create = "..."  # optional; blocking hook after a dispatch worktree is made
+before_run = "..."             # optional; blocking hook before a --run dispatch launches
+after_run = "..."              # optional; advisory hook after a --run dispatch exits
 ```
 
 ## Runtimes
@@ -185,7 +202,7 @@ Prepare a dispatch (composes the prompt, prints the shell command to run):
 livery dispatch prep <ticket-id> --worktree
 ```
 
-Run the printed command (usually as a background task so you can keep working). When it finishes, close the ticket with `livery ticket close` and the loop continues.
+Run the printed command (usually as a background task so you can keep working). Every prepared dispatch writes a durable attempt record to `.livery/dispatch/attempts/<attempt-id>.json`, pointing at the prompt file, output file, runtime, model, PID/status when known, and any hook outcomes. When the agent finishes, read the summary and close the ticket with `livery ticket close`.
 
 To run **the same ticket against multiple agents in parallel** — e.g. to triangulate a research output across two different models — use fan-out:
 
@@ -198,12 +215,43 @@ Each agent gets its own git worktree, prompt file, and output file. Drop `--run`
 To check on dispatches you've launched:
 
 ```sh
-livery dispatch status                    # rollup of every dispatch artifact in /tmp
+livery dispatch status                    # attempt records first, /tmp fallback for legacy/manual runs
 livery dispatch tail <query>              # one-shot: print last 20 lines
 livery dispatch tail <query> -f           # follow (tail -f)
 ```
 
-`status` flags each dispatch as **done** (its output contains a `=== DISPATCH_SUMMARY ===` block), **active** (recent file activity, no summary yet), or **stale** (file hasn't moved in 5+ minutes and never produced a summary — usually means the agent crashed or stuck).
+`status` reads workspace attempt JSON first, then falls back to scanning `/tmp/livery-dispatch-*.out` for old or manually launched commands. Attempt-backed dispatches show richer lifecycle states: **prepared**, **running**, **succeeded**, **failed**, **blocked**, **stale**, **cancelled**, or **unknown**. For old/manual outputs with no attempt record, Livery still uses the legacy **done**, **active**, and **stale** classification.
+
+### Dispatch hooks
+
+Optional `[dispatch_hooks]` commands in `livery.toml` let you wire local automation into the dispatch lifecycle:
+
+- `after_worktree_create` runs only when `--worktree` creates a worktree. Failure blocks the dispatch prep.
+- `before_run` runs before `dispatch fan-out --run` or `walkie auto` launches a runtime. Failure blocks that run.
+- `after_run` runs after a launched runtime exits. Failure is recorded as a warning, not a replacement for the runtime status.
+
+Hook logs land under `.livery/dispatch/hooks/`, and each outcome is recorded on the attempt JSON.
+
+## Walkie-Talkie
+
+Walkie-Talkie is Livery's append-only debate protocol for two AI peers. Use it when a decision benefits from two agents pushing on each other's reasoning before implementation.
+
+Manual mode creates the shared transcript and leaves turn-taking to the participants:
+
+```sh
+livery walkie new "rate limiter design" --with codex --as claude-code
+livery walkie list
+livery walkie show rate-limiter-design
+```
+
+Auto mode creates or resumes a transcript and alternates two hired agents until both sign, a turn stalls, or `--max-turns` is reached:
+
+```sh
+livery walkie auto "rate limiter design" --peer-a proposer --peer-b critic --ticket <ticket-id>
+livery walkie auto "rate limiter design" --resume
+```
+
+Each auto turn is a normal dispatch attempt with its own prompt, output, hook outcomes, and status record.
 
 ## Status
 
