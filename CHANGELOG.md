@@ -4,6 +4,8 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.12.1 — 2026-05-18
+
 ### Fixed
 - `livery link --move-existing-workspace` now preserves repo-level `CLAUDE.md` / `AGENTS.md` content when converting an accidental in-repo workspace into a linked repo. Livery strips its managed workspace block from those files, removes empty boilerplate-only convention files, and leaves real repo-specific instructions in the project repo instead of trying to move them into the parent workspace.
 
