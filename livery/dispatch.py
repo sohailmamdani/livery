@@ -26,6 +26,7 @@ class DispatchPrep:
     assignee: str
     runtime: str
     model: str | None
+    effort: str | None
     cwd: str
     prompt_path: Path
     output_path: Path
@@ -94,6 +95,7 @@ def build_runtime_command(
     *,
     runtime: str,
     model: str | None,
+    effort: str | None = None,
     cwd: str,
     prompt_path: Path,
     output_path: Path,
@@ -119,6 +121,8 @@ def build_runtime_command(
         parts = ["codex", "exec"]
         if model:
             parts += ["--model", model]
+        if effort:
+            parts += ["--config", f'model_reasoning_effort="{effort}"']
         parts += [
             "--cd", cwd,
             "--dangerously-bypass-approvals-and-sandbox",
@@ -135,6 +139,8 @@ def build_runtime_command(
         parts = ["claude", "-p", "--dangerously-skip-permissions"]
         if model:
             parts += ["--model", model]
+        if effort:
+            parts += ["--effort", effort]
         quoted = " ".join(shlex.quote(p) for p in parts)
         return f"cd {cwd_q} && {quoted} < {prompt_q} > {output_q} 2>&1"
 
@@ -252,6 +258,7 @@ def prepare_dispatch(
     agent_post = frontmatter.load(agent_md_path)
     runtime = str(agent_post.get("runtime") or "codex")
     model = agent_post.get("model")
+    effort = agent_post.get("effort")
     cwd = agent_post.get("cwd")
     if not cwd:
         raise ValueError(f"Agent '{assignee}' has no cwd in agent.md")
@@ -287,6 +294,7 @@ def prepare_dispatch(
     command = build_runtime_command(
         runtime=runtime,
         model=str(model) if model else None,
+        effort=str(effort) if effort else None,
         cwd=actual_cwd,
         prompt_path=prompt_path,
         output_path=output_path,
@@ -350,6 +358,7 @@ def prepare_dispatch(
         assignee=str(assignee),
         runtime=runtime,
         model=str(model) if model else None,
+        effort=str(effort) if effort else None,
         cwd=actual_cwd,
         prompt_path=prompt_path,
         output_path=output_path,
@@ -496,6 +505,7 @@ def prepare_walkie_turn(
     agent_post = frontmatter.load(agent_md_path)
     runtime = str(agent_post.get("runtime") or "codex")
     model = agent_post.get("model")
+    effort = agent_post.get("effort")
     cwd = agent_post.get("cwd") or str(root)
 
     agents_md = agents_md_path.read_text()
@@ -529,6 +539,7 @@ def prepare_walkie_turn(
     command = build_runtime_command(
         runtime=runtime,
         model=str(model) if model else None,
+        effort=str(effort) if effort else None,
         cwd=str(cwd),
         prompt_path=prompt_path,
         output_path=output_path,
@@ -565,6 +576,7 @@ def prepare_walkie_turn(
         assignee=str(peer),
         runtime=runtime,
         model=str(model) if model else None,
+        effort=str(effort) if effort else None,
         cwd=str(cwd),
         prompt_path=prompt_path,
         output_path=output_path,

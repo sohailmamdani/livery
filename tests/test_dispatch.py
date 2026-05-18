@@ -83,6 +83,19 @@ def test_build_runtime_command_codex_with_model(tmp_path):
     assert f"> {output}" in cmd
 
 
+def test_build_runtime_command_codex_with_effort(tmp_path):
+    cmd = build_runtime_command(
+        runtime="codex",
+        model="gpt-5.5",
+        effort="high",
+        cwd="/tmp/x",
+        prompt_path=tmp_path / "p.txt",
+        output_path=tmp_path / "o.out",
+    )
+    assert "--model gpt-5.5" in cmd
+    assert "--config 'model_reasoning_effort=\"high\"'" in cmd
+
+
 def test_build_runtime_command_codex_without_model(tmp_path):
     cmd = build_runtime_command(
         runtime="codex",
@@ -110,6 +123,19 @@ def test_build_runtime_command_claude_code(tmp_path):
     assert "--model claude-sonnet-4-6" in cmd
     assert f"< {prompt}" in cmd
     assert f"> {output}" in cmd
+
+
+def test_build_runtime_command_claude_code_with_effort(tmp_path):
+    cmd = build_runtime_command(
+        runtime="claude_code",
+        model="claude-opus-4-7",
+        effort="high",
+        cwd="/Users/sohail/code/brand",
+        prompt_path=tmp_path / "p.txt",
+        output_path=tmp_path / "o.out",
+    )
+    assert "--model claude-opus-4-7" in cmd
+    assert "--effort high" in cmd
 
 
 def test_build_runtime_command_cursor(tmp_path):
