@@ -64,7 +64,7 @@ This puts a `livery` binary on your PATH. Verify:
 livery --help
 ```
 
-You should see the top-level commands: `init`, `hire`, `doctor`, `ticket`, `dispatch`, `telegram`.
+You should see the top-level commands: `init`, `onboard`, `next`, `session-brief`, `hire`, `doctor`, `ticket`, `memory`, `dispatch`, `walkie`, and `telegram` among others.
 
 ### Updating later
 
@@ -122,7 +122,7 @@ Interactive mode asks for:
 - **Default runtime** — optional, leave blank if unsure.
 - **Telegram chat id** — optional, skip for now; we'll come back to it.
 
-(If you're running `livery onboard` instead, it also asks which CoS engine you want — Claude Code, Codex, or both. If you're calling `livery init` directly, pass `--cos-engine claude_code|codex|both`; the default is `both`.)
+(If you're running `livery onboard` instead, it also asks which CoS engine you want — Claude Code, Codex, Pi, OpenCode, or a comma-separated combination. If you're calling `livery init` directly, pass `--cos-engine claude_code|codex|pi|opencode|both`; the default is `both`.)
 
 After `init`, your workspace looks like this (with `--cos-engine both` — the default):
 
@@ -133,16 +133,25 @@ my-first-company/
 ├── AGENTS.md                        # CoS conventions, read by Codex (same content)
 ├── agents/                          # where hired agents will live
 ├── tickets/                         # where tickets will live
+├── memory/                          # decisions, lessons, preferences
+│   ├── decisions/
+│   ├── lessons/
+│   └── preferences/
 ├── .claude/                         # Claude Code skill discovery
 │   ├── commands/ticket.md           # /ticket slash command
-│   └── skills/new-ticket/SKILL.md
+│   ├── commands/walkie.md           # /walkie slash command
+│   └── skills/
+│       ├── new-ticket/SKILL.md
+│       └── walkie-talkie/SKILL.md
 └── .agents/                         # Codex skill discovery (.agents/skills)
-    └── skills/new-ticket/SKILL.md
+    └── skills/
+        ├── new-ticket/SKILL.md
+        └── walkie-talkie/SKILL.md
 ```
 
-`CLAUDE.md` and `AGENTS.md` have identical content — they're named for the two engines that auto-load them. Same with the `new-ticket` skill: it's scaffolded at `.claude/skills/new-ticket/SKILL.md` for Claude Code and `.agents/skills/new-ticket/SKILL.md` for Codex. Delete whichever pair you don't use, or keep both if you move between engines.
+`CLAUDE.md` and `AGENTS.md` have identical content — they're named for the two engines that auto-load them. The shipped `new-ticket` and `walkie-talkie` skills are scaffolded under `.claude/` for Claude Code and `.agents/` for Codex. Delete whichever pair you don't use, or keep both if you move between engines.
 
-If you used `--cos-engine claude_code`, only `CLAUDE.md` and `.claude/` get scaffolded. If you used `--cos-engine codex`, only `AGENTS.md` and `.agents/` get scaffolded — no stray Claude-specific files in your workspace.
+If you used `--cos-engine claude_code`, only `CLAUDE.md` and `.claude/` get scaffolded. If you used `--cos-engine codex`, only `AGENTS.md` and `.agents/` get scaffolded — no stray Claude-specific files in your workspace. Pi and OpenCode use `AGENTS.md` but do not need Claude/Codex skill directories.
 
 (Heads up on the naming: there's also `agents/<id>/AGENTS.md` inside each hired agent's folder, which is a different file with a different job — it's the agent's system prompt for dispatch. And `.agents/skills/` (with a leading dot) is the Codex skill dir — different from `agents/` (without a dot), which is Livery's hired-agents directory. See `docs/config.md` for the full disambiguation.)
 
@@ -176,9 +185,9 @@ The migration moves the repo's tickets, agents, runtime metadata, and CoS scaffo
 
 For an isolated one-off project, it is also acceptable to create a dedicated Livery workspace for that project. The decision rule is whether the same CoS should share context, tickets, and agents across the work.
 
-## Step 4: Edit `CLAUDE.md`
+## Step 4: Edit your CoS convention file
 
-This is the single most important file. Claude Code auto-loads it every time you start a session in this directory — so it's how your **Chief of Staff** (CoS) knows what company it's running, what conventions to follow, and how to talk to you.
+This is the single most important file. Claude Code auto-loads `CLAUDE.md`; Codex, Pi, and OpenCode use `AGENTS.md`. This is how your **Chief of Staff** (CoS) knows what company it's running, what conventions to follow, and how to talk to you.
 
 The scaffolded version gives you a skeleton. Open it and extend it with:
 
@@ -199,6 +208,7 @@ Agents are where the real work happens. Each agent has:
 - A **short id** (like `writer`, `research`, `lead-dev`). Becomes the directory name under `agents/`.
 - A **runtime** (one of the runtimes `doctor` said was `ok`).
 - A **model** (runtime-specific — e.g. `claude-sonnet-4-6` for `claude_code`, `gpt-5-codex` for `codex`).
+- Optional **effort** in `agent.md`, if you want to pin a reasoning-effort hint for runtimes that support it. Livery currently passes this through to Codex and Claude Code.
 - A **`cwd:`** — the directory the agent operates in. This is **not the workspace directory** — it's wherever the agent's actual work lives. A code repo, a writing folder, a data project.
 - A **role** description.
 
@@ -245,9 +255,11 @@ cd ~/companies/my-first-company   # back to the workspace
 # Whichever engine you've chosen:
 claude                             # Claude Code — auto-loads CLAUDE.md
 codex                              # Codex — auto-loads AGENTS.md
+pi                                 # Pi — auto-loads AGENTS.md
+opencode                           # OpenCode — auto-loads AGENTS.md
 ```
 
-Whichever you opened, the engine reads its convention file (CLAUDE.md or AGENTS.md) and takes the role of **your CoS** for this company. Both engines work the same way for Livery — it's all shell commands, ticket markdown, and conversation. Talk to the CoS like you would a chief of staff:
+Whichever you opened, the engine reads its convention file (`CLAUDE.md` or `AGENTS.md`) and takes the role of **your CoS** for this company. CoS engines work the same way for Livery — it's all shell commands, ticket markdown, and conversation. Talk to the CoS like you would a chief of staff:
 
 - "What do we have going on today?" → it runs `livery ticket list`.
 - "I want to write a blog post about X. File a ticket for the writer agent." → it files a ticket.
@@ -270,7 +282,7 @@ Or just tell the CoS: *"File a ticket for yourself to write out my company's goa
 CoS-assigned tickets aren't dispatched — the CoS handles them conversationally, in the same Claude Code session. When done, close the ticket:
 
 ```sh
-livery ticket close <ticket-id> --summary "Drafted in CLAUDE.md under ## Goals."
+livery ticket close <ticket-id> --summary "Drafted in the CoS convention file under ## Goals."
 ```
 
 That commits, pushes, and (if configured) pings Telegram.
@@ -345,7 +357,7 @@ Commands that aren't part of first-time setup but become routine:
 
 ## What to do next
 
-- **Extend `CLAUDE.md`** as you learn what your CoS needs to know. Treat it as a living document.
+- **Extend your CoS convention file** (`CLAUDE.md` and/or `AGENTS.md`) as you learn what your CoS needs to know. Treat it as a living document.
 - **Hire more agents** as distinct roles emerge. "If `AGENTS.md` starts saying 'and also…', it's probably two agents."
 - **Don't create a second workspace** just because you started a new project. A new project is a new agent `cwd:` or a new agent, not a new company.
 - **Read [`docs/patterns.md`](patterns.md)** for worked examples and anti-patterns.

@@ -1,6 +1,6 @@
 # Configuration
 
-Livery has two kinds of config:
+Livery has three kinds of config:
 
 1. **Workspace config** — `livery.toml` at the workspace root. Marks the directory as a Livery workspace and captures user-specific settings.
 2. **Agent config** — `agents/<id>/agent.md` frontmatter. Declares what an agent is, what runtime it runs on, and where it works.
@@ -29,17 +29,22 @@ cos_engines = ["claude_code", "codex"]     # list of CoS engines this workspace 
 [telegram]
 chat_id = "-1001234567890"                 # string — group or DM id for ticket-close pings
 token_file = "~/.claude/channels/telegram/.env"  # string — path to .env containing TELEGRAM_BOT_TOKEN
+
+[dispatch_hooks]
+after_worktree_create = "..."              # optional blocking hook after a worktree is created/reused
+before_run = "..."                         # optional blocking hook before --run dispatches
+after_run = "..."                          # optional advisory hook after --run dispatches
 ```
 
 ### Fields
 
 #### `name` (string)
 
-Human-readable workspace name. Used in CLI output (`livery init`, `livery doctor`) and in the generated `CLAUDE.md`. Defaults to the directory name if unset.
+Human-readable workspace name. Used in CLI output (`livery init`, `livery doctor`) and in the generated CoS convention file(s). Defaults to the directory name if unset.
 
 #### `description` (string)
 
-One-liner shown in `CLAUDE.md`. Purely informational.
+One-liner shown in generated CoS convention file(s). Purely informational.
 
 #### `default_runtime` (string, optional)
 
@@ -64,6 +69,14 @@ Optional. If present, Livery pings your configured chat when tickets close.
 - **`chat_id`** — Telegram chat or group id. For a group, prefix with `-100`. For a topic inside a group, the format is `-100<group_id>/<topic_id>` (Livery handles topic parsing).
 - **`token_file`** — Path to a `.env` file containing `TELEGRAM_BOT_TOKEN=...`. Defaults to `~/.claude/channels/telegram/.env` if unset. `~` and `$HOME` are expanded.
 
+#### `[dispatch_hooks]` table
+
+Optional. These commands let local automation participate in the dispatch lifecycle. Hook commands run from the workspace context and receive attempt metadata through the environment. Hook logs are stored under `.livery/dispatch/hooks/`, and each outcome is recorded on the dispatch attempt JSON.
+
+- **`after_worktree_create`** — runs only when `livery dispatch prep --worktree` creates or reuses a worktree. Failure blocks dispatch prep.
+- **`before_run`** — runs before `livery dispatch fan-out --run` or `livery walkie auto` launches a runtime. Failure blocks that run.
+- **`after_run`** — runs after a launched runtime exits. Failure is recorded as a warning; it does not replace the runtime status.
+
 ## `agents/<id>/agent.md`
 
 Each hired agent lives at `agents/<id>/agent.md`. The frontmatter is the structured config; the body is a one-line role description (the long-form system prompt goes in `agents/<id>/AGENTS.md`).
@@ -76,6 +89,7 @@ id: writer                  # required — must match the directory name
 name: Senior Writer         # required — human-friendly name
 runtime: claude_code        # required — one of the supported runtimes
 model: claude-sonnet-4-6    # optional for harness runtimes; required for lm_studio / ollama
+effort: high                # optional — passed to runtimes that support effort controls
 cwd: /Users/me/code/repo    # required — where the agent works
 reports_to: cos             # optional — default "cos"
 hired: 2026-04-20           # optional — ISO date
@@ -90,6 +104,7 @@ One-line role: what this agent does, for whom.
 - **`name`** — human-readable name. Used in CLI output.
 - **`runtime`** — the runtime module that handles dispatch. See `docs/runtimes.md`.
 - **`model`** — the specific model id the runtime should use. For `lm_studio` / `ollama` this is required because Livery passes it on the HTTP call. For harness runtimes it's passed via `--model` when present, otherwise the harness's own default applies.
+- **`effort`** — optional reasoning/effort hint. Livery currently passes this to Codex as `model_reasoning_effort` and to Claude Code as `--effort`; other runtimes ignore it.
 - **`cwd`** — the directory the agent operates in. For engineering agents, typically a git repo (so worktree-based dispatch works). `livery doctor` warns if the path doesn't exist or isn't a git repo.
 - **`reports_to`** — informational; used by the CoS to understand team structure. Default: `cos`.
 - **`hired`** — ISO date the agent was created. Informational.

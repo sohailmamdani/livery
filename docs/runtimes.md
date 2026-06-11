@@ -28,6 +28,11 @@ The harness reads the prompt on stdin, runs autonomously with its own tool surfa
 
 Livery passes flags that disable interactive approval gates (`--dangerously-bypass-approvals-and-sandbox` for Codex, `--dangerously-skip-permissions` for Claude Code, `--force` for Cursor). This is intentional: dispatched agents run unattended.
 
+Agent frontmatter can also tune the runtime command:
+
+- `model` is passed to CLI harnesses as `--model <model>` when present. For `lm_studio` and `ollama`, `model` is required because Livery sends it in the OpenAI-compatible chat-completions request.
+- `effort` is optional. Livery currently passes it to Codex as `--config model_reasoning_effort="<effort>"` and to Claude Code as `--effort <effort>`. Cursor, LM Studio, and Ollama ignore it.
+
 ### Raw-LLM runtimes: `lm_studio`, `ollama`
 
 These are OpenAI-compatible HTTP endpoints, not harnesses. There's no binary that knows how to read files or run commands — the model returns text, and someone has to interpret it. For these runtimes, Livery itself runs the agent loop (`livery/runtimes/lm_studio.py`): it calls `/v1/chat/completions`, parses any tool calls the model emits, executes them, feeds results back, and repeats (capped at 20 iterations by default).

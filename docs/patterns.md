@@ -42,6 +42,19 @@ These commands accept `--format json`. CoS agents should use that structured out
 
 For Codex and Claude Code, `livery install-agent-hooks` installs a local `SessionStart` hook that injects `livery session-brief` automatically. The brief tells the CoS whether it is in the workspace itself or a linked repo, includes a compact status summary, and instructs it to acknowledge that context to the user at the start of the session.
 
+### Durable memory
+
+Tickets track work. CoS convention files define standing instructions. `memory/` is for the middle category: durable decisions, lessons, and preferences that should survive future sessions but do not belong as always-on policy.
+
+Good memory entries are short, sourceable, and reviewable:
+
+```sh
+livery memory add --type decision --title "Use worktrees for engineering dispatches" --source-ticket <ticket-id> --body "Engineering agents should use --worktree unless the ticket explicitly says otherwise."
+livery memory search worktree
+```
+
+Use memory when a completed ticket teaches the workspace something reusable, when the user states a preference the CoS should remember, or when a decision should be easy to cite later. Do not use memory as hidden autonomy: agents can suggest entries, but the operator or CoS should decide what becomes durable workspace knowledge.
+
 ### Linked project repos
 
 For convenience, a project repo can point back to its coordinating workspace with `.livery-link.toml`:
@@ -120,6 +133,7 @@ Plus the **CoS** — your Claude Code session running in the workspace directory
 3. **Dispatch runs in the background** with `livery dispatch prep <ticket> --worktree`. Output streams to `/tmp/livery-dispatch-<ticket>.out`. For engineering work you use `--worktree` so the agent can't step on your in-progress changes.
 4. **The agent finishes** with a `=== DISPATCH_SUMMARY ===` block stating what it did, what it touched, and any pushback it wants you to see.
 5. **CoS reads the summary**, reports to you, and — on your go-ahead — runs `livery ticket close <ticket> --summary "..."` which commits, pushes, and pings Telegram.
+6. **CoS captures durable lessons** with `livery memory add` only when the ticket produced reusable knowledge, not for every routine close.
 
 ### Why two research agents?
 
@@ -174,7 +188,7 @@ reports_to: cos
 
 That's it. No engineering agents, no data agents. Most of your "tickets" are just CoS-handled notes: you chat with your CoS about the current chapter, it keeps track of what you've decided, and when you need a research pass it dispatches `researcher` with a clear brief.
 
-The point: **Livery scales down as well as up.** A workspace with one agent and a good `CLAUDE.md` is a perfectly valid use.
+The point: **Livery scales down as well as up.** A workspace with one agent and a good CoS convention file is a perfectly valid use.
 
 ## Anti-patterns
 

@@ -15,6 +15,7 @@ Tech-savvy operators (not necessarily programmers) who want an AI workforce on t
 - A **workspace** (a directory with `agents/`, `tickets/`, config) that becomes your CoS's operating context.
 - **Linked project repos** so you can run `livery` commands from source repos while keeping one shared workspace/backlog.
 - A **CLI** for hiring agents, filing tickets, dispatching work to agents, closing the loop.
+- **Workspace memory** for durable decisions, lessons, and preferences as git-tracked markdown.
 - **Runtime adapters** so agents can live on different stacks: Claude Code CLI, Codex CLI, Cursor, LM Studio, Ollama. Adding a new adapter is ~30 lines of Python.
 - **Durable dispatch attempts** under `.livery/dispatch/attempts/`, with status, PID, failures, hook outcomes, prompt path, and output path recorded per run.
 - **Walkie-Talkie** for structured AI-to-AI debate, either manual append-only transcripts or automated alternating dispatches between two hired agents.
@@ -50,14 +51,14 @@ After upgrading, run `livery upgrade-workspace` in any existing workspace to ref
 ### Pinning to a specific version (advanced)
 
 ```sh
-uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.7.0' livery
+uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.13.0' livery
 ```
 
-**Important caveat:** pinning with `@v0.7.0` (or any git ref) makes `uv tool upgrade livery` a no-op forever — uv re-resolves the same pinned ref each time and concludes nothing has changed. To move a pinned install to a newer version, you have to reinstall with the new tag (or drop the pin entirely):
+**Important caveat:** pinning with `@v0.13.0` (or any git ref) makes `uv tool upgrade livery` a no-op forever — uv re-resolves the same pinned ref each time and concludes nothing has changed. To move a pinned install to a newer version, you have to reinstall with the new tag (or drop the pin entirely):
 
 ```sh
-# move the pin forward
-uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.8.0' livery
+# move the pin forward when a newer tag exists
+uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@vX.Y.Z' livery
 
 # or unpin and float with main
 uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git' livery
@@ -195,12 +196,14 @@ id: writer
 name: Senior Writer
 runtime: claude_code
 model: claude-sonnet-4-6
+effort: high
 cwd: /Users/me/code/my-content-repo
-title: Senior Writer
 reports_to: cos
 hired: 2026-04-20
 ---
 ```
+
+`model` is passed through to the runtime when present. `effort` is optional; today Livery passes it to Codex as `model_reasoning_effort` and to Claude Code as `--effort`.
 
 ## Dispatch
 
@@ -229,6 +232,19 @@ livery dispatch tail <query> -f           # follow (tail -f)
 ```
 
 `status` reads workspace attempt JSON first, then falls back to scanning `/tmp/livery-dispatch-*.out` for old or manually launched commands. Attempt-backed dispatches show richer lifecycle states: **prepared**, **running**, **succeeded**, **failed**, **blocked**, **stale**, **cancelled**, or **unknown**. For old/manual outputs with no attempt record, Livery still uses the legacy **done**, **active**, and **stale** classification.
+
+## Memory
+
+Memory is git-tracked workspace knowledge, not hidden model memory. Use it for durable decisions, lessons, and preferences that future CoS sessions or agents should be able to rediscover:
+
+```sh
+livery memory add --type decision --title "Use worktrees for agent edits" --body "Engineering agents should dispatch with --worktree unless the ticket says otherwise."
+livery memory list
+livery memory search worktree
+livery memory show <id>
+```
+
+Entries live under `memory/decisions/`, `memory/lessons/`, and `memory/preferences/`. `livery init` creates those directories for new workspaces; `livery upgrade-workspace --apply` backfills the scaffold for existing workspaces without touching existing memory entries.
 
 ### Dispatch hooks
 
@@ -291,7 +307,7 @@ If you've edited `CLAUDE.md` and want `AGENTS.md` (or vice versa) to reflect the
 ```sh
 livery sync-cos                        # dry-run preview
 livery sync-cos --apply                # actually write
-livery sync-cos --from AGENTS.md       # explicit source (default: most recently modified)
+livery sync-cos --from AGENTS.md       # explicit source (default: richest user content)
 ```
 
 This mirrors user content from one sibling convention file to all the others, with each target's framework block refreshed to current. Useful when you maintain CLAUDE.md as the canonical file but also want Codex/Pi/OpenCode users to get the same workspace context.
