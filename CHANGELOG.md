@@ -4,6 +4,9 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Added
+- Workspace memory. New `livery memory add/list/show/search` commands store decisions, lessons, and preferences as git-tracked markdown under `memory/`. New workspaces get `memory/{decisions,lessons,preferences}/.gitkeep` from `livery init`, and existing workspaces can backfill the scaffold with `livery upgrade-workspace --apply` without touching existing memory entries.
+
 ## 0.12.1 — 2026-05-18
 
 ### Fixed

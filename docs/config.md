@@ -198,6 +198,44 @@ blocked_on: "waiting on Airtable schema PR"  # optional — see below
 
 `livery status` flags any open ticket that's been around for ≥ `--stale-days` (default 7) as stale. **Age is computed from `created`, not `updated`** — so a spec rewrite or a thread comment doesn't reset the staleness clock. The reasoning: "this work has been outstanding for N days" is a more useful signal than "the file changed N days ago," especially for tickets you re-scope mid-flight. If you want a different convention, override the threshold per-run with `--stale-days N` or change the `stale_days` parameter in `compute_status()`.
 
+## `memory/`
+
+Workspace memory is git-tracked markdown for durable knowledge the CoS and agents should be able to rediscover later. It is intentionally explicit: no hidden vector store, no automatic prompt rewriting, and no silent learning.
+
+`livery init` creates the scaffold, and `livery upgrade-workspace --apply` backfills it for existing workspaces:
+
+```text
+memory/
+├── decisions/
+├── lessons/
+└── preferences/
+```
+
+Use the CLI instead of hand-picking filenames:
+
+```sh
+livery memory add --type decision --title "Use worktrees for agent edits" --body "Engineering agents should dispatch with --worktree unless the ticket says otherwise."
+livery memory list
+livery memory search worktree
+livery memory show <id>
+```
+
+Each entry is a markdown file with frontmatter:
+
+```yaml
+---
+id: 2026-06-11-001-use-worktrees-for-agent-edits
+title: Use worktrees for agent edits
+type: decision              # decision | lesson | preference
+scope: workspace            # free-form; "workspace" by default
+source_ticket: 2026-06-10-003-refactor-dispatch  # optional
+created: 2026-06-11T12:00:00Z
+updated: 2026-06-11T12:00:00Z
+---
+```
+
+Memory entries are user-owned once created. `upgrade-workspace` may create missing category directories and `.gitkeep` files, but it does not inspect or rewrite existing entries.
+
 ## `agents/<id>/AGENTS.md`
 
 The long-form system prompt for the agent. Livery passes its contents as-is when dispatching a ticket. The `livery hire` wizard scaffolds it with section headers (`## Role`, `## Scope`, `## Out of scope`, `## Process`, `## Quality bar`, `## Output format`) that you fill in during a Claude Code session.

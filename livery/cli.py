@@ -32,6 +32,14 @@ from .init import (
     SkillCollisionResolution,
     init_workspace,
 )
+from .memory import (
+    MemoryEntry,
+    create_memory_entry,
+    find_memory_entries,
+    iter_memory_entries,
+    normalize_memory_type,
+    search_memory_entries,
+)
 from .onboard import run_onboarding
 from .paths import (
     add_link_to_git_exclude,
@@ -80,10 +88,12 @@ ticket_app = typer.Typer(no_args_is_help=True, help="Manage tickets")
 dispatch_app = typer.Typer(no_args_is_help=True, help="Dispatch tickets to registered agents")
 telegram_app = typer.Typer(no_args_is_help=True, help="Manage Telegram bot integration")
 walkie_app = typer.Typer(no_args_is_help=True, help="Walkie-Talkie: turn-based debate between two AI sessions")
+memory_app = typer.Typer(no_args_is_help=True, help="Manage workspace memory")
 app.add_typer(ticket_app, name="ticket")
 app.add_typer(dispatch_app, name="dispatch")
 app.add_typer(telegram_app, name="telegram")
 app.add_typer(walkie_app, name="walkie")
+app.add_typer(memory_app, name="memory")
 
 
 @app.callback()
@@ -186,6 +196,135 @@ def _find_ticket(root: Path, query: str) -> Path:
             typer.echo(f"  {m.stem}", err=True)
         raise typer.Exit(1)
     return matches[0]
+
+
+def _render_memory_rows(entries: list[MemoryEntry], root: Path) -> None:
+    if not entries:
+        typer.echo("(no memory entries)")
+        return
+    for entry in entries:
+        rel = entry.path.relative_to(root)
+        typer.echo(f"{entry.type:<10} {entry.scope:<10} {entry.id}  {entry.title}  ({rel})")
+
+
+def _memory_type_or_exit(memory_type: str | None) -> str | None:
+    if memory_type is None:
+        return None
+    try:
+        return normalize_memory_type(memory_type)
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+
+
+@memory_app.command("add")
+def memory_add(
+    memory_type: str = typer.Option(
+        ...,
+        "--type",
+        "-t",
+        help="Memory type: decision, lesson, or preference.",
+    ),
+    title: str = typer.Option(..., "--title", help="Short title for the memory entry."),
+    body: Optional[str] = typer.Option(
+        None,
+        "--body",
+        "-b",
+        help="Markdown body. Opens $EDITOR when omitted.",
+    ),
+    scope: str = typer.Option(
+        "workspace",
+        "--scope",
+        help="Scope this memory applies to, e.g. workspace or an agent id.",
+    ),
+    source_ticket: Optional[str] = typer.Option(
+        None,
+        "--source-ticket",
+        help="Ticket id that produced this memory, when applicable.",
+    ),
+) -> None:
+    """Add a git-tracked workspace memory entry."""
+    root = find_root()
+    if body is None:
+        edited = typer.edit("\n# Capture the durable decision, lesson, or preference.\n")
+        body = (edited or "").strip()
+    try:
+        entry = create_memory_entry(
+            root=root,
+            memory_type=memory_type,
+            title=title,
+            body=body,
+            scope=scope,
+            source_ticket=source_ticket,
+        )
+    except (RuntimeError, ValueError) as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(str(entry.path.relative_to(root)))
+
+
+@memory_app.command("list")
+def memory_list(
+    memory_type: Optional[str] = typer.Option(
+        None,
+        "--type",
+        "-t",
+        help="Filter by type: decision, lesson, or preference.",
+    ),
+) -> None:
+    """List workspace memory entries."""
+    root = find_root()
+    memory_type = _memory_type_or_exit(memory_type)
+    try:
+        entries = iter_memory_entries(root, memory_type=memory_type)
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    _render_memory_rows(entries, root)
+
+
+@memory_app.command("show")
+def memory_show(query: str) -> None:
+    """Print a memory entry. `query` matches id, title, or filename."""
+    root = find_root()
+    try:
+        matches = find_memory_entries(root, query)
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    if not matches:
+        typer.echo(f"No memory entry matching '{query}'", err=True)
+        raise typer.Exit(1)
+    if len(matches) > 1:
+        typer.echo(f"Multiple memory entries matching '{query}':", err=True)
+        for entry in matches:
+            typer.echo(f"  {entry.id}  {entry.title}", err=True)
+        raise typer.Exit(1)
+    typer.echo(matches[0].path.read_text())
+
+
+@memory_app.command("search")
+def memory_search(
+    query: str,
+    memory_type: Optional[str] = typer.Option(
+        None,
+        "--type",
+        "-t",
+        help="Filter by type: decision, lesson, or preference.",
+    ),
+) -> None:
+    """Search workspace memory entries with case-insensitive substring matching."""
+    root = find_root()
+    memory_type = _memory_type_or_exit(memory_type)
+    try:
+        entries = search_memory_entries(root, query, memory_type=memory_type)
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    if not entries:
+        typer.echo("(no matches)")
+        return
+    _render_memory_rows(entries, root)
 
 
 @ticket_app.command("new")
@@ -1370,9 +1509,11 @@ def upgrade_workspace(
     today, and offers to update the framework-managed parts only:
     - The LIVERY-MANAGED block at the top of CLAUDE.md / AGENTS.md / etc.
     - Skill files for each declared CoS engine.
+    - The memory/ directory scaffold, if missing.
 
     Hard guardrails: never touches livery.toml, agents/, tickets/, or any
-    user-edited content outside the LIVERY-MANAGED markers.
+    user-edited content outside the LIVERY-MANAGED markers. Existing memory
+    entries are never inspected or rewritten.
     """
     root = find_root()
     plan = compute_plan(root)

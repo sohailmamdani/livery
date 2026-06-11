@@ -109,6 +109,10 @@ livery ticket new --title "Draft the homepage copy" --assignee cos
 # See what's on the board
 livery ticket list
 
+# Record durable workspace knowledge
+livery memory add --type lesson --title "Review dispatch output before closing" --body "..."
+livery memory search dispatch
+
 # Dispatch a ticket to its assigned agent (composes prompt + prints command)
 livery dispatch prep <ticket-id>
 
@@ -132,6 +136,10 @@ my-workspace/
 ├── AGENTS.md                                  # CoS conventions (Codex reads this) — same content as CLAUDE.md
 ├── agents/                                    # one dir per hired agent (Livery)
 ├── tickets/                                   # one markdown per ticket
+├── memory/                                    # git-tracked decisions, lessons, preferences
+│   ├── decisions/
+│   ├── lessons/
+│   └── preferences/
 ├── walkie-talkie/                             # append-only AI-to-AI debate transcripts, created on first use
 ├── .livery/                                   # ignored runtime state: dispatch attempts, hook logs, walkie prompts
 ├── .claude/                                   # Claude Code's skill discovery dir
@@ -274,7 +282,7 @@ livery upgrade-workspace          # dry run — shows what would change
 livery upgrade-workspace --apply  # actually write changes
 ```
 
-Hard guardrails: it never touches `livery.toml`, `agents/`, `tickets/`, or anything outside the `LIVERY-MANAGED` markers in your CoS convention files. Safe to run after every `uv tool upgrade livery`.
+Hard guardrails: it never touches `livery.toml`, `agents/`, `tickets/`, existing `memory/` entries, or anything outside the `LIVERY-MANAGED` markers in your CoS convention files. Safe to run after every `uv tool upgrade livery`.
 
 ## Sync convention files
 

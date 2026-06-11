@@ -79,6 +79,20 @@ CAPABILITIES: tuple[Capability, ...] = (
         agent_note="Prefer creating a ticket when work spans turns, needs delegation, or should be committed.",
     ),
     Capability(
+        id="memory",
+        group="Remember durable knowledge",
+        title="Record decisions, lessons, and preferences",
+        summary="Store durable workspace knowledge as git-tracked markdown under memory/.",
+        commands=(
+            "livery memory add --type lesson --title \"...\" --body \"...\"",
+            "livery memory list",
+            "livery memory search <query>",
+            "livery memory show <id>",
+        ),
+        when="Use when a decision, lesson, or preference should survive future sessions.",
+        agent_note="Memory is audited workspace knowledge, not hidden chat memory; cite source tickets when possible.",
+    ),
+    Capability(
         id="agents",
         group="Coordinate agents",
         title="Hire agents and dispatch tickets",

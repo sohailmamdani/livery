@@ -336,11 +336,12 @@ Now `livery ticket close` pings the group, and you can type `/tickets` in Telegr
 
 ## Day-to-day commands you'll come back to
 
-Three commands that aren't part of first-time setup but become routine:
+Commands that aren't part of first-time setup but become routine:
 
 - **`livery status`** — at-a-glance dashboard. Open tickets by assignee, stale ones (open ≥ 7 days), blocked ones, recent closes, runtime health. The companion to `livery ticket list` (which is the flat scriptable cut). Run it whenever you sit down to work and want to know where the team stands.
+- **`livery memory add/list/search/show`** — record durable decisions, lessons, and preferences as git-tracked markdown under `memory/`. Use this for knowledge that should survive beyond the current chat.
 - **`livery dispatch fan-out <ticket> --to a,b --run`** — dispatch the same ticket to multiple agents in parallel. Each agent gets its own git worktree and output file. Useful for triangulating research outputs across different models, or running the same engineering ticket through Codex and Claude Code for comparison.
-- **`livery upgrade-workspace`** — after a `uv tool upgrade livery` brings in a new framework version, this refreshes the framework-managed parts of your workspace (the `LIVERY-MANAGED` block in `CLAUDE.md`/`AGENTS.md`, shipped skill files) without touching your custom content. Dry-run by default; pass `--apply` to actually write.
+- **`livery upgrade-workspace`** — after a `uv tool upgrade livery` brings in a new framework version, this refreshes the framework-managed parts of your workspace (the `LIVERY-MANAGED` block in `CLAUDE.md`/`AGENTS.md`, shipped skill files, missing memory scaffold) without touching your custom content. Dry-run by default; pass `--apply` to actually write.
 
 ## What to do next
 

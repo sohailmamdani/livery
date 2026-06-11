@@ -17,6 +17,7 @@ def test_capabilities_text_lists_feature_groups():
     assert "Connect repos" in result.stdout
     assert "livery link <workspace> --repo-id <repo>" in result.stdout
     assert "livery next --format json" in result.stdout
+    assert "livery memory search <query>" in result.stdout
     assert "livery install-agent-hooks" in result.stdout
     assert "livery telegram register-commands" in result.stdout
 
@@ -29,6 +30,7 @@ def test_capabilities_json_is_agent_readable():
     ids = {item["id"] for item in parsed["capabilities"]}
     assert "discover" in ids
     assert "linked-repos" in ids
+    assert "memory" in ids
     assert all("agent_note" in item for item in parsed["capabilities"])
 
 
@@ -139,6 +141,8 @@ def test_managed_cos_block_points_agents_to_discovery(tmp_path):
 
     content = (workspace / "AGENTS.md").read_text()
     assert "## Discoverability" in content
+    assert "## Workspace memory" in content
+    assert "livery memory add/list/show/search" in content
     assert "livery next --format json" in content
     assert "livery capabilities --format json" in content
     assert "livery session-brief" in content

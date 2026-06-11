@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from shutil import rmtree
 
 import pytest
+from typer.testing import CliRunner
 
+from livery.cli import app
 from livery.cos_engines import MANAGED_BEGIN, MANAGED_END, wrap_managed
 from livery.init import COS_MANAGED_BLOCK, NEW_TICKET_SKILL, init_workspace
 from livery.upgrade import Action, apply_plan, compute_plan, compute_sync_plan
@@ -161,6 +164,57 @@ def test_compute_plan_creates_missing_skill(tmp_path):
     item = next(i for i in plan.items if i.path == skill_path)
     assert item.action == Action.CREATE
     assert item.new_content == NEW_TICKET_SKILL
+
+
+def test_compute_plan_creates_missing_memory_scaffold(tmp_path):
+    root = _fresh_workspace(tmp_path, cos_engine="claude_code")
+    rmtree(root / "memory")
+
+    plan = compute_plan(root)
+    created = {i.path.relative_to(root) for i in plan.items if i.action == Action.CREATE}
+
+    assert Path("memory/decisions/.gitkeep") in created
+    assert Path("memory/lessons/.gitkeep") in created
+    assert Path("memory/preferences/.gitkeep") in created
+
+
+def test_apply_plan_backfills_memory_scaffold_idempotently(tmp_path):
+    root = _fresh_workspace(tmp_path, cos_engine="claude_code")
+    rmtree(root / "memory")
+
+    apply_plan(compute_plan(root))
+
+    assert (root / "memory" / "decisions" / ".gitkeep").exists()
+    assert (root / "memory" / "lessons" / ".gitkeep").exists()
+    assert (root / "memory" / "preferences" / ".gitkeep").exists()
+    assert all(i.action != Action.CREATE for i in compute_plan(root).items)
+
+
+def test_upgrade_workspace_dry_run_reports_missing_memory_scaffold(tmp_path, monkeypatch):
+    root = _fresh_workspace(tmp_path, cos_engine="claude_code")
+    rmtree(root / "memory")
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(app, ["upgrade-workspace"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "[create] memory/decisions/.gitkeep" in result.stdout
+    assert "dry-run; pass --apply" in result.stdout
+
+
+def test_compute_plan_fails_when_memory_is_file(tmp_path):
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / "livery.toml").write_text('name = "ws"\ncos_engines = ["pi"]\n')
+    (root / "AGENTS.md").write_text("# ws\n")
+    (root / "agents").mkdir()
+    (root / "tickets").mkdir()
+    (root / "memory").write_text("not a directory")
+
+    with pytest.raises(RuntimeError) as ei:
+        compute_plan(root)
+
+    assert "exists but is not a directory" in str(ei.value)
 
 
 def test_compute_plan_legacy_workspace_migrates_to_all_engines(tmp_path):

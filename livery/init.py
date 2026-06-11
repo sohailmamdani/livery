@@ -28,6 +28,7 @@ from .cos_engines import (
     resolve_engines,
     wrap_managed,
 )
+from .memory import ensure_memory_scaffold
 
 
 LIVERY_TOML_HEADER = """# Livery workspace config.
@@ -126,6 +127,18 @@ you, not the intern-compliance version.
 - On ticket close, ping Telegram if `livery.toml` configures it.
 - Every ticket mutation should be followed by a git commit.
 - Plain language. Tech-savvy users may not be programmers; skip jargon.
+
+## Workspace memory
+
+- Durable decisions, lessons, and preferences belong in `memory/`, not in
+  hidden chat memory. Use `livery memory add/list/show/search` to manage
+  them.
+- Treat memory entries as audited workspace knowledge: cite the source
+  ticket when there is one, keep entries concise, and let git history show
+  how the workspace learned.
+- Do not silently rewrite agent prompts, CoS convention files, or memory
+  based on a hunch. Propose those self-improvements through normal tickets
+  or explicit diffs so the operator can review them.
 
 ## Discoverability
 
@@ -553,6 +566,7 @@ def init_workspace(
 
     _write_fresh(target / "agents" / ".gitkeep", "")
     _write_fresh(target / "tickets" / ".gitkeep", "")
+    result.created.extend(ensure_memory_scaffold(target))
 
     # Engine-specific skill / command assets. For each target path:
     # - if missing → write Livery's

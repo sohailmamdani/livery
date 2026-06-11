@@ -23,6 +23,8 @@ The framework-managed parts are:
   current shipped content.
 - Skill / slash-command files for each engine declared in
   `livery.toml`'s `cos_engines` — added when missing.
+- The `memory/` directory skeleton (`decisions`, `lessons`,
+  `preferences`) — added when missing and otherwise left alone.
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ from .init import (
     NEW_TICKET_SKILL,
     TICKET_SLASH,
 )
+from .memory import memory_scaffold_paths, validate_memory_scaffold
 
 
 class Action(Enum):
@@ -261,6 +264,23 @@ def _plan_skill_file(path: Path, content: str) -> PlanItem:
     )
 
 
+def _plan_memory_scaffold(root: Path) -> list[PlanItem]:
+    """Plan missing memory directory sentinels without touching user content."""
+    validate_memory_scaffold(root)
+    items: list[PlanItem] = []
+    for path in memory_scaffold_paths(root):
+        if not path.exists():
+            items.append(
+                PlanItem(
+                    path=path,
+                    action=Action.CREATE,
+                    reason="memory scaffold missing — will create git-tracked category directory",
+                    new_content="",
+                )
+            )
+    return items
+
+
 def compute_plan(root: Path) -> UpgradePlan:
     """Build the full upgrade plan for `root`. Pure: no file writes."""
     engine_ids, name, description, is_legacy = _read_workspace_meta(root)
@@ -291,6 +311,8 @@ def compute_plan(root: Path) -> UpgradePlan:
                 root / engine.skills_dir / "new-ticket" / "SKILL.md",
                 NEW_TICKET_SKILL,
             ))
+
+    items.extend(_plan_memory_scaffold(root))
 
     return UpgradePlan(workspace_root=root, cos_engines=engine_ids, items=items)
 

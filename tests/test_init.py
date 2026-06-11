@@ -67,6 +67,9 @@ def test_init_workspace_creates_standard_layout(tmp_path):
     assert Path("AGENTS.md") in paths
     assert Path("agents/.gitkeep") in paths
     assert Path("tickets/.gitkeep") in paths
+    assert Path("memory/decisions/.gitkeep") in paths
+    assert Path("memory/lessons/.gitkeep") in paths
+    assert Path("memory/preferences/.gitkeep") in paths
     # Claude Code assets
     assert Path(".claude/commands/ticket.md") in paths
     assert Path(".claude/skills/new-ticket/SKILL.md") in paths
