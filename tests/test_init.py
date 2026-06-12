@@ -71,10 +71,16 @@ def test_init_workspace_creates_standard_layout(tmp_path):
     assert Path("memory/lessons/.gitkeep") in paths
     assert Path("memory/preferences/.gitkeep") in paths
     # Claude Code assets
+    assert Path(".claude/commands/hello.md") in paths
     assert Path(".claude/commands/ticket.md") in paths
+    assert Path(".claude/commands/walkie.md") in paths
+    assert Path(".claude/skills/hello/SKILL.md") in paths
     assert Path(".claude/skills/new-ticket/SKILL.md") in paths
+    assert Path(".claude/skills/walkie-talkie/SKILL.md") in paths
     # Codex assets
+    assert Path(".agents/skills/hello/SKILL.md") in paths
     assert Path(".agents/skills/new-ticket/SKILL.md") in paths
+    assert Path(".agents/skills/walkie-talkie/SKILL.md") in paths
 
 
 def test_init_workspace_writes_default_runtime_and_telegram(tmp_path):
@@ -117,7 +123,9 @@ def test_init_workspace_cos_engine_claude_code_only(tmp_path):
     assert (target / "CLAUDE.md").exists()
     assert not (target / "AGENTS.md").exists()
     # Claude Code skill scaffolding present
+    assert (target / ".claude" / "skills" / "hello" / "SKILL.md").exists()
     assert (target / ".claude" / "skills" / "new-ticket" / "SKILL.md").exists()
+    assert (target / ".claude" / "commands" / "hello.md").exists()
     assert (target / ".claude" / "commands" / "ticket.md").exists()
     # Walkie-talkie skill + slash command present
     assert (target / ".claude" / "skills" / "walkie-talkie" / "SKILL.md").exists()
@@ -132,6 +140,7 @@ def test_init_workspace_cos_engine_codex_only(tmp_path):
     assert (target / "AGENTS.md").exists()
     assert not (target / "CLAUDE.md").exists()
     # Codex skill scaffolding present at the .agents/ path
+    assert (target / ".agents" / "skills" / "hello" / "SKILL.md").exists()
     assert (target / ".agents" / "skills" / "new-ticket" / "SKILL.md").exists()
     # Walkie-talkie skill installed for Codex too — initiating from
     # either harness must work
@@ -176,7 +185,9 @@ def test_init_workspace_multiple_engines_dedupe_filenames(tmp_path):
     # AGENTS.md scaffolded once even though three engines want it
     assert sum(1 for p in paths if str(p) == "AGENTS.md") == 1
     # Codex still gets its skill dir; pi/opencode don't add anything
+    assert Path(".agents/skills/hello/SKILL.md") in paths
     assert Path(".agents/skills/new-ticket/SKILL.md") in paths
+    assert Path(".agents/skills/walkie-talkie/SKILL.md") in paths
     # CLAUDE.md not requested
     assert not (target / "CLAUDE.md").exists()
 

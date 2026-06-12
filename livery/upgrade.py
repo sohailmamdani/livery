@@ -50,8 +50,12 @@ ALL_SUPPORTED_ENGINES: list[str] = list(COS_ENGINES.keys())
 from .init import (
     COS_MANAGED_BLOCK,
     COS_USER_TEMPLATE,
+    HELLO_SKILL,
+    HELLO_SLASH,
     NEW_TICKET_SKILL,
     TICKET_SLASH,
+    WALKIE_SKILL,
+    WALKIE_SLASH,
 )
 from .memory import memory_scaffold_paths, validate_memory_scaffold
 
@@ -303,13 +307,29 @@ def compute_plan(root: Path) -> UpgradePlan:
         engine = COS_ENGINES[eid]
         if engine.commands_dir:
             items.append(_plan_skill_file(
+                root / engine.commands_dir / "hello.md",
+                HELLO_SLASH,
+            ))
+            items.append(_plan_skill_file(
                 root / engine.commands_dir / "ticket.md",
                 TICKET_SLASH,
             ))
+            items.append(_plan_skill_file(
+                root / engine.commands_dir / "walkie.md",
+                WALKIE_SLASH,
+            ))
         if engine.skills_dir:
+            items.append(_plan_skill_file(
+                root / engine.skills_dir / "hello" / "SKILL.md",
+                HELLO_SKILL,
+            ))
             items.append(_plan_skill_file(
                 root / engine.skills_dir / "new-ticket" / "SKILL.md",
                 NEW_TICKET_SKILL,
+            ))
+            items.append(_plan_skill_file(
+                root / engine.skills_dir / "walkie-talkie" / "SKILL.md",
+                WALKIE_SKILL,
             ))
 
     items.extend(_plan_memory_scaffold(root))

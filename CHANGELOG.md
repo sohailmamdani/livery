@@ -4,6 +4,12 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Added
+- Shipped `hello` CoS entry skill/command. New workspaces get `/hello` for Claude Code and a `hello` skill for Codex; both run `livery session-brief`, acknowledge the active workspace or linked repo, then run `livery status` for a quick board check. `livery upgrade-workspace --apply` backfills the new hello assets for existing workspaces.
+
+### Fixed
+- `livery upgrade-workspace` now backfills all shipped skill and slash-command assets, including the walkie-talkie assets, instead of only the original ticket skill.
+
 ## 0.13.0 — 2026-06-11
 
 ### Added

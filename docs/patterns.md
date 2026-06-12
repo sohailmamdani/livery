@@ -42,6 +42,8 @@ These commands accept `--format json`. CoS agents should use that structured out
 
 For Codex and Claude Code, `livery install-agent-hooks` installs a local `SessionStart` hook that injects `livery session-brief` automatically. The brief tells the CoS whether it is in the workspace itself or a linked repo, includes a compact status summary, and instructs it to acknowledge that context to the user at the start of the session.
 
+When hooks are not installed or you want an explicit check-in, use the shipped hello entry point (`/hello` in Claude Code, `hello` skill in Codex). It runs the same session brief and follows with `livery status`.
+
 ### Durable memory
 
 Tickets track work. CoS convention files define standing instructions. `memory/` is for the middle category: durable decisions, lessons, and preferences that should survive future sessions but do not belong as always-on policy.

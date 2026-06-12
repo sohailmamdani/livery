@@ -288,4 +288,10 @@ The leading dot disambiguates them on disk and in `ls -la`; otherwise no overlap
 
 When `cos_engine` includes Codex, Livery scaffolds skills at `.agents/skills/<name>/SKILL.md` (Codex's convention). When `cos_engine` includes Claude Code, the same skills go to `.claude/skills/<name>/SKILL.md` (plus a slash-command entry at `.claude/commands/<name>.md`).
 
+Shipped skills today:
+
+- **`hello`** — entry handshake for a new session. Runs `livery session-brief`, acknowledges the workspace or linked repo, then runs `livery status`.
+- **`new-ticket`** — helps turn user intent into a markdown ticket.
+- **`walkie-talkie`** — starts or continues append-only AI-to-AI debate.
+
 Both `SKILL.md` formats use the same frontmatter (`name`, `description`) and prose body, so the file content is identical between engines — only the discovery path differs.

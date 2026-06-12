@@ -145,6 +145,10 @@ you, not the intern-compliance version.
 - When you are unsure what Livery can do from the current directory, run
   `livery next`.
 - When you need the full feature menu, run `livery capabilities`.
+- When the user wants a fresh orientation to the current workspace, use the
+  shipped hello command/skill. It runs `livery session-brief` and a quick
+  `livery status` check so the session starts grounded in live workspace
+  state.
 - When acting programmatically or advising another agent, prefer structured
   output: `livery next --format json` and `livery capabilities --format json`.
 - If Livery-managed SessionStart hooks are installed, read the injected
@@ -204,6 +208,25 @@ Steps:
 3. Show the user the created file path and ticket id.
 """
 
+HELLO_SLASH = """---
+description: Orient this session to the current Livery workspace
+livery: managed
+---
+
+Help the user start from live Livery context.
+
+Steps:
+1. Run `livery session-brief --format text`.
+2. If the brief says this is not Livery-aware, tell the user exactly that
+   and suggest `livery next`.
+3. If the brief finds a workspace or linked repo, briefly acknowledge the
+   workspace path and whether this session is in the workspace or a linked
+   repo.
+4. Run `livery status` for a quick board check.
+5. Summarize the useful status signals: open tickets by assignee, blocked
+   and stale counts, recent closes if shown, and any obvious next action.
+"""
+
 NEW_TICKET_SKILL = """---
 name: new-ticket
 description: Create a new Livery ticket to track work or delegate to an agent. Use when the user says "create a ticket", "new ticket", "file a ticket", invokes `/ticket`, or describes a unit of work that should be formalized.
@@ -231,6 +254,38 @@ Livery tracks work as markdown tickets in `tickets/<YYYY-MM-DD>-<NNN>-<slug>.md`
 1. Gather missing fields conversationally.
 2. Run `livery ticket new --title "..." --assignee <id|cos|null> --description "..." [--context "..."]`.
 3. Show the created path.
+"""
+
+
+HELLO_SKILL = """---
+name: hello
+description: Orient the current AI session to a Livery workspace or linked repo. Use when the user says hello, asks for a workspace check-in, asks "where are we?", invokes `/hello`, or wants the session to recognize Livery context before doing work.
+livery: managed
+---
+
+# Livery hello
+
+Use this skill to ground the current session in live Livery state.
+
+## Steps
+
+1. Run `livery session-brief --format text`.
+2. If the brief says this directory is not Livery-aware:
+   - Say that plainly.
+   - Do not claim there is an active workspace.
+   - Suggest `livery next` if the user expected one.
+3. If the brief finds a workspace or linked repo:
+   - Briefly acknowledge the workspace path.
+   - Say whether the current directory is the workspace itself or a linked
+     repo.
+4. Run `livery status`.
+5. Give a concise check-in:
+   - open ticket counts by assignee
+   - blocked and stale counts
+   - recent closes if shown
+   - the most useful next action
+
+Keep the response short. This is an entry handshake, not a full report.
 """
 
 
@@ -626,9 +681,11 @@ def init_workspace(
     for eid in engine_ids:
         engine = COS_ENGINES[eid]
         if engine.commands_dir:
+            _install_skill_file(target / engine.commands_dir / "hello.md", HELLO_SLASH)
             _install_skill_file(target / engine.commands_dir / "ticket.md", TICKET_SLASH)
             _install_skill_file(target / engine.commands_dir / "walkie.md", WALKIE_SLASH)
         if engine.skills_dir:
+            _install_skill_file(target / engine.skills_dir / "hello" / "SKILL.md", HELLO_SKILL)
             _install_skill_file(target / engine.skills_dir / "new-ticket" / "SKILL.md", NEW_TICKET_SKILL)
             _install_skill_file(target / engine.skills_dir / "walkie-talkie" / "SKILL.md", WALKIE_SKILL)
 

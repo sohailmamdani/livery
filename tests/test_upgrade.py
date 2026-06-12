@@ -8,7 +8,15 @@ from typer.testing import CliRunner
 
 from livery.cli import app
 from livery.cos_engines import MANAGED_BEGIN, MANAGED_END, wrap_managed
-from livery.init import COS_MANAGED_BLOCK, NEW_TICKET_SKILL, init_workspace
+from livery.init import (
+    COS_MANAGED_BLOCK,
+    HELLO_SKILL,
+    HELLO_SLASH,
+    NEW_TICKET_SKILL,
+    WALKIE_SKILL,
+    WALKIE_SLASH,
+    init_workspace,
+)
 from livery.upgrade import Action, apply_plan, compute_plan, compute_sync_plan
 
 
@@ -164,6 +172,45 @@ def test_compute_plan_creates_missing_skill(tmp_path):
     item = next(i for i in plan.items if i.path == skill_path)
     assert item.action == Action.CREATE
     assert item.new_content == NEW_TICKET_SKILL
+
+
+def test_compute_plan_creates_missing_hello_assets(tmp_path):
+    root = _fresh_workspace(tmp_path, cos_engine="both")
+    command_path = root / ".claude" / "commands" / "hello.md"
+    claude_skill_path = root / ".claude" / "skills" / "hello" / "SKILL.md"
+    codex_skill_path = root / ".agents" / "skills" / "hello" / "SKILL.md"
+    command_path.unlink()
+    claude_skill_path.unlink()
+    codex_skill_path.unlink()
+
+    plan = compute_plan(root)
+    command_item = next(i for i in plan.items if i.path == command_path)
+    claude_skill_item = next(i for i in plan.items if i.path == claude_skill_path)
+    codex_skill_item = next(i for i in plan.items if i.path == codex_skill_path)
+
+    assert command_item.action == Action.CREATE
+    assert command_item.new_content == HELLO_SLASH
+    assert claude_skill_item.action == Action.CREATE
+    assert claude_skill_item.new_content == HELLO_SKILL
+    assert codex_skill_item.action == Action.CREATE
+    assert codex_skill_item.new_content == HELLO_SKILL
+
+
+def test_compute_plan_creates_missing_walkie_assets(tmp_path):
+    root = _fresh_workspace(tmp_path, cos_engine="claude_code")
+    command_path = root / ".claude" / "commands" / "walkie.md"
+    skill_path = root / ".claude" / "skills" / "walkie-talkie" / "SKILL.md"
+    command_path.unlink()
+    skill_path.unlink()
+
+    plan = compute_plan(root)
+    command_item = next(i for i in plan.items if i.path == command_path)
+    skill_item = next(i for i in plan.items if i.path == skill_path)
+
+    assert command_item.action == Action.CREATE
+    assert command_item.new_content == WALKIE_SLASH
+    assert skill_item.action == Action.CREATE
+    assert skill_item.new_content == WALKIE_SKILL
 
 
 def test_compute_plan_creates_missing_memory_scaffold(tmp_path):

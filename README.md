@@ -19,7 +19,7 @@ Tech-savvy operators (not necessarily programmers) who want an AI workforce on t
 - **Runtime adapters** so agents can live on different stacks: Claude Code CLI, Codex CLI, Cursor, LM Studio, Ollama. Adding a new adapter is ~30 lines of Python.
 - **Durable dispatch attempts** under `.livery/dispatch/attempts/`, with status, PID, failures, hook outcomes, prompt path, and output path recorded per run.
 - **Walkie-Talkie** for structured AI-to-AI debate, either manual append-only transcripts or automated alternating dispatches between two hired agents.
-- **Discoverability commands and startup hooks** so CoS sessions can ask Livery what applies from the current directory instead of guessing from stale docs.
+- **Discoverability commands, startup hooks, and a hello skill** so CoS sessions can ask Livery what applies from the current directory instead of guessing from stale docs.
 - **Telegram integration** — close a ticket, get a ping.
 - **CoS convention files** for Claude Code, Codex, Pi, and OpenCode, plus slash commands and skills where those engines support them.
 
@@ -94,6 +94,7 @@ livery init                             # scaffolds CLAUDE.md + AGENTS.md by def
 livery doctor                           # see which runtimes are reachable
 livery hire writer                      # hire your first agent (interactive wizard)
 livery install-agent-hooks              # make Codex / Claude Code start Livery-aware
+# Manual session entry: `/hello` in Claude Code, or the `hello` skill in Codex.
 
 # From a project repo, point local livery commands back at this workspace
 cd ~/code/my-project
@@ -126,6 +127,8 @@ livery ticket close <ticket-id> --status cancelled --summary "Folded into the ne
 
 `livery next`, `livery capabilities`, and `livery session-brief` are intentionally useful to both humans and CoS agents. Add `--format json` when Codex, Claude Code, or another tool needs structured output instead of prose. `livery install-agent-hooks` wires `session-brief` into Codex / Claude Code `SessionStart` hooks for the current workspace or linked repo.
 
+If hooks are not installed or you want an explicit session handshake, use the shipped hello entry point. Claude Code gets `/hello`; Codex gets the `hello` skill. It runs `livery session-brief`, acknowledges the active workspace or linked repo, then runs `livery status` for a quick board check.
+
 ## Workspace layout
 
 A typical workspace looks like this. `livery init` creates the core scaffold; runtime state directories such as `.livery/` and `walkie-talkie/` appear on first use.
@@ -144,13 +147,16 @@ my-workspace/
 ├── walkie-talkie/                             # append-only AI-to-AI debate transcripts, created on first use
 ├── .livery/                                   # ignored runtime state: dispatch attempts, hook logs, walkie prompts
 ├── .claude/                                   # Claude Code's skill discovery dir
+│   ├── commands/hello.md                      # /hello orientation command
 │   ├── commands/ticket.md                     # /ticket slash command
 │   ├── commands/walkie.md                     # /walkie slash command
 │   └── skills/
+│       ├── hello/SKILL.md
 │       ├── new-ticket/SKILL.md
 │       └── walkie-talkie/SKILL.md
 └── .agents/                                   # Codex's skill discovery dir (.agents/skills)
     └── skills/
+        ├── hello/SKILL.md
         ├── new-ticket/SKILL.md
         └── walkie-talkie/SKILL.md
 ```
