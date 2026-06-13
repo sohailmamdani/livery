@@ -4,6 +4,8 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.14.0 — 2026-06-12
+
 ### Added
 - Shipped `hello` CoS entry skill/command. New workspaces get `/hello` for Claude Code and a `hello` skill for Codex; both run `livery session-brief`, acknowledge the active workspace or linked repo, then run `livery status` for a quick board check. `livery upgrade-workspace --apply` backfills the new hello assets for existing workspaces.
 
