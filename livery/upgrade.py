@@ -52,6 +52,10 @@ from .init import (
     COS_USER_TEMPLATE,
     HELLO_SKILL,
     HELLO_SLASH,
+    LIVERY_COMMAND_GROUP,
+    LIVERY_HELLO_SKILL_NAME,
+    LIVERY_NEW_TICKET_SKILL_NAME,
+    LIVERY_WALKIE_SKILL_NAME,
     NEW_TICKET_SKILL,
     TICKET_SLASH,
     WALKIE_SKILL,
@@ -306,29 +310,30 @@ def compute_plan(root: Path) -> UpgradePlan:
     for eid in engine_ids:
         engine = COS_ENGINES[eid]
         if engine.commands_dir:
+            command_group = root / engine.commands_dir / LIVERY_COMMAND_GROUP
             items.append(_plan_skill_file(
-                root / engine.commands_dir / "hello.md",
+                command_group / "hello.md",
                 HELLO_SLASH,
             ))
             items.append(_plan_skill_file(
-                root / engine.commands_dir / "ticket.md",
+                command_group / "ticket.md",
                 TICKET_SLASH,
             ))
             items.append(_plan_skill_file(
-                root / engine.commands_dir / "walkie.md",
+                command_group / "walkie.md",
                 WALKIE_SLASH,
             ))
         if engine.skills_dir:
             items.append(_plan_skill_file(
-                root / engine.skills_dir / "hello" / "SKILL.md",
+                root / engine.skills_dir / LIVERY_HELLO_SKILL_NAME / "SKILL.md",
                 HELLO_SKILL,
             ))
             items.append(_plan_skill_file(
-                root / engine.skills_dir / "new-ticket" / "SKILL.md",
+                root / engine.skills_dir / LIVERY_NEW_TICKET_SKILL_NAME / "SKILL.md",
                 NEW_TICKET_SKILL,
             ))
             items.append(_plan_skill_file(
-                root / engine.skills_dir / "walkie-talkie" / "SKILL.md",
+                root / engine.skills_dir / LIVERY_WALKIE_SKILL_NAME / "SKILL.md",
                 WALKIE_SKILL,
             ))
 

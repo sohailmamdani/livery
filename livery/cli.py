@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import frontmatter
 import typer
@@ -118,6 +119,183 @@ def _validate_output_format(output_format: str) -> str:
         typer.echo("--format must be one of: text, json", err=True)
         raise typer.Exit(1)
     return output_format
+
+
+def _echo_json(payload: object) -> None:
+    if isinstance(payload, dict) and "schema_version" not in payload:
+        payload = {"schema_version": 1, **payload}
+    typer.echo(json.dumps(_json_safe(payload), indent=2))
+
+
+def _json_safe(value: object) -> object:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, (datetime,)):
+        return value.isoformat()
+    return str(value)
+
+
+def _relative_path(path: Path, root: Path) -> str:
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
+
+
+def _ticket_payload(
+    *,
+    post: frontmatter.Post,
+    path: Path,
+    root: Path,
+    include_content: bool = False,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": str(post.get("id") or path.stem),
+        "title": str(post.get("title") or ""),
+        "assignee": _json_safe(post.get("assignee")),
+        "status": str(post.get("status") or ""),
+        "created": _json_safe(post.get("created")),
+        "updated": _json_safe(post.get("updated")),
+        "blocked_on": _json_safe(post.get("blocked_on")),
+        "path": str(path),
+        "relative_path": _relative_path(path, root),
+        "metadata": _json_safe(dict(post.metadata)),
+    }
+    if include_content:
+        payload["content"] = post.content
+    return payload
+
+
+def _memory_payload(
+    entry: MemoryEntry,
+    *,
+    root: Path,
+    include_content: bool = False,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": entry.id,
+        "title": entry.title,
+        "type": entry.type,
+        "scope": entry.scope,
+        "source_ticket": entry.source_ticket,
+        "created": entry.created,
+        "updated": entry.updated,
+        "path": str(entry.path),
+        "relative_path": _relative_path(entry.path, root),
+    }
+    if include_content:
+        payload["content"] = entry.content
+    return payload
+
+
+def _dispatch_prep_payload(prep: object) -> dict[str, Any]:
+    return {
+        "ticket_id": getattr(prep, "ticket_id"),
+        "assignee": getattr(prep, "assignee"),
+        "runtime": getattr(prep, "runtime"),
+        "model": getattr(prep, "model"),
+        "effort": getattr(prep, "effort"),
+        "cwd": getattr(prep, "cwd"),
+        "prompt_path": str(getattr(prep, "prompt_path")),
+        "output_path": str(getattr(prep, "output_path")),
+        "command": getattr(prep, "command"),
+        "attempt_id": getattr(prep, "attempt_id"),
+        "attempt_path": (
+            str(getattr(prep, "attempt_path"))
+            if getattr(prep, "attempt_path") is not None
+            else None
+        ),
+    }
+
+
+def _dispatch_view_payload(view: object) -> dict[str, Any]:
+    attempt = getattr(view, "attempt", None)
+    inferred_status = getattr(view, "inferred_status", None)
+    if attempt is not None:
+        displayed_status = inferred_status or attempt.status
+        source = "attempt"
+    else:
+        displayed_status = getattr(view, "state")
+        source = "output"
+
+    return {
+        "label": getattr(view, "label"),
+        "source": source,
+        "status": getattr(displayed_status, "value", str(displayed_status)),
+        "legacy_state": getattr(getattr(view, "state"), "value", str(getattr(view, "state"))),
+        "inferred_status": (
+            inferred_status.value if inferred_status is not None else None
+        ),
+        "path": str(getattr(view, "path")) if getattr(view, "path") else None,
+        "age_seconds": getattr(view, "age_seconds"),
+        "size_bytes": getattr(view, "size_bytes"),
+        "last_line": getattr(view, "last_line"),
+        "summary_excerpt": getattr(view, "summary_excerpt"),
+        "attempt": attempt.to_json_dict() if attempt is not None else None,
+    }
+
+
+def _ticket_summary_payload(ticket: object) -> dict[str, Any]:
+    created = getattr(ticket, "created")
+    updated = getattr(ticket, "updated")
+    return {
+        "id": getattr(ticket, "id"),
+        "title": getattr(ticket, "title"),
+        "assignee": getattr(ticket, "assignee"),
+        "status": getattr(ticket, "status"),
+        "created": created.isoformat() if created else None,
+        "updated": updated.isoformat() if updated else None,
+        "blocked_on": getattr(ticket, "blocked_on"),
+        "age_days": getattr(ticket, "age_days"),
+    }
+
+
+def _status_report_payload(report: object) -> dict[str, Any]:
+    last_commit = None
+    if getattr(report, "last_commit") is not None:
+        when, subject = getattr(report, "last_commit")
+        last_commit = {
+            "when": when.isoformat(),
+            "subject": subject,
+        }
+    return {
+        "workspace_name": getattr(report, "workspace_name"),
+        "workspace_root": str(getattr(report, "workspace_root")),
+        "last_commit": last_commit,
+        "open_by_assignee": getattr(report, "open_by_assignee"),
+        "oldest_open_per_assignee": getattr(report, "oldest_open_per_assignee"),
+        "stale_days": getattr(report, "stale_days"),
+        "stale_tickets": [
+            _ticket_summary_payload(ticket)
+            for ticket in getattr(report, "stale_tickets")
+        ],
+        "blocked_tickets": [
+            _ticket_summary_payload(ticket)
+            for ticket in getattr(report, "blocked_tickets")
+        ],
+        "recently_closed": [
+            _ticket_summary_payload(ticket)
+            for ticket in getattr(report, "recently_closed")
+        ],
+        "runtimes": {
+            "ok": getattr(report, "runtimes_ok"),
+            "total": getattr(report, "runtimes_total"),
+        },
+    }
+
+
+def _tail_text(path: Path, lines: int) -> str:
+    text = path.read_text(errors="replace")
+    selected = text.splitlines()[-lines:]
+    if not selected:
+        return ""
+    return "\n".join(selected) + "\n"
 
 
 @app.command("capabilities")
@@ -242,8 +420,15 @@ def memory_add(
         "--source-ticket",
         help="Ticket id that produced this memory, when applicable.",
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
 ) -> None:
     """Add a git-tracked workspace memory entry."""
+    output_format = _validate_output_format(output_format)
     root = find_root()
     if body is None:
         edited = typer.edit("\n# Capture the durable decision, lesson, or preference.\n")
@@ -260,6 +445,9 @@ def memory_add(
     except (RuntimeError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1) from e
+    if output_format == "json":
+        _echo_json({"memory": _memory_payload(entry, root=root, include_content=True)})
+        return
     typer.echo(str(entry.path.relative_to(root)))
 
 
@@ -271,8 +459,15 @@ def memory_list(
         "-t",
         help="Filter by type: decision, lesson, or preference.",
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
 ) -> None:
     """List workspace memory entries."""
+    output_format = _validate_output_format(output_format)
     root = find_root()
     memory_type = _memory_type_or_exit(memory_type)
     try:
@@ -280,12 +475,29 @@ def memory_list(
     except RuntimeError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1) from e
+    if output_format == "json":
+        _echo_json({
+            "memory": [
+                _memory_payload(entry, root=root)
+                for entry in entries
+            ]
+        })
+        return
     _render_memory_rows(entries, root)
 
 
 @memory_app.command("show")
-def memory_show(query: str) -> None:
+def memory_show(
+    query: str,
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
+) -> None:
     """Print a memory entry. `query` matches id, title, or filename."""
+    output_format = _validate_output_format(output_format)
     root = find_root()
     try:
         matches = find_memory_entries(root, query)
@@ -300,6 +512,11 @@ def memory_show(query: str) -> None:
         for entry in matches:
             typer.echo(f"  {entry.id}  {entry.title}", err=True)
         raise typer.Exit(1)
+    if output_format == "json":
+        _echo_json({
+            "memory": _memory_payload(matches[0], root=root, include_content=True)
+        })
+        return
     typer.echo(matches[0].path.read_text())
 
 
@@ -312,8 +529,15 @@ def memory_search(
         "-t",
         help="Filter by type: decision, lesson, or preference.",
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
 ) -> None:
     """Search workspace memory entries with case-insensitive substring matching."""
+    output_format = _validate_output_format(output_format)
     root = find_root()
     memory_type = _memory_type_or_exit(memory_type)
     try:
@@ -321,6 +545,14 @@ def memory_search(
     except RuntimeError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1) from e
+    if output_format == "json":
+        _echo_json({
+            "memory": [
+                _memory_payload(entry, root=root, include_content=True)
+                for entry in entries
+            ]
+        })
+        return
     if not entries:
         typer.echo("(no matches)")
         return
@@ -333,8 +565,15 @@ def ticket_new(
     assignee: Optional[str] = typer.Option(None, "--assignee", "-a", help="Agent id, 'cos', or blank for unassigned"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Paragraph stating the goal"),
     context: Optional[str] = typer.Option(None, "--context", help="Optional links/constraints/prior decisions"),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
 ) -> None:
     """Create a new ticket."""
+    output_format = _validate_output_format(output_format)
     root = find_root()
     now = _now_iso()
     today = now[:10]
@@ -365,6 +604,16 @@ def ticket_new(
         updated=now,
     )
     path.write_text(frontmatter.dumps(post) + "\n")
+    if output_format == "json":
+        _echo_json({
+            "ticket": _ticket_payload(
+                post=post,
+                path=path,
+                root=root,
+                include_content=True,
+            )
+        })
+        return
     typer.echo(str(path.relative_to(root)))
 
 
@@ -372,22 +621,34 @@ def ticket_new(
 def ticket_list(
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status"),
     assignee: Optional[str] = typer.Option(None, "--assignee", "-a", help="Filter by assignee"),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
 ) -> None:
     """List tickets, optionally filtered."""
+    output_format = _validate_output_format(output_format)
     root = find_root()
     rows = []
+    tickets = []
     for path in sorted((root / "tickets").glob("*.md")):
         post = frontmatter.load(path)
         if status and post.get("status") != status:
             continue
         if assignee and post.get("assignee") != assignee:
             continue
+        tickets.append(_ticket_payload(post=post, path=path, root=root))
         rows.append((
             str(post.get("status", "?")),
             str(post.get("assignee") or "-"),
             str(post.get("id", path.stem)),
             str(post.get("title", "")),
         ))
+    if output_format == "json":
+        _echo_json({"tickets": tickets})
+        return
     if not rows:
         typer.echo("(no tickets)")
         return
@@ -396,10 +657,30 @@ def ticket_list(
 
 
 @ticket_app.command("show")
-def ticket_show(query: str) -> None:
+def ticket_show(
+    query: str,
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
+) -> None:
     """Print a ticket's contents. `query` matches anywhere in the filename."""
+    output_format = _validate_output_format(output_format)
     root = find_root()
     path = _find_ticket(root, query)
+    if output_format == "json":
+        post = frontmatter.load(path)
+        _echo_json({
+            "ticket": _ticket_payload(
+                post=post,
+                path=path,
+                root=root,
+                include_content=True,
+            )
+        })
+        return
     typer.echo(path.read_text())
 
 
@@ -413,6 +694,12 @@ def ticket_close(
     ),
     telegram: bool = typer.Option(True, "--telegram/--no-telegram", help="Send Telegram notification on close"),
     push: bool = typer.Option(True, "--push/--no-push", help="git push after commit"),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
 ) -> None:
     """Close a ticket: flip status→<terminal>, append optional CoS summary, git commit, ping Telegram.
 
@@ -423,6 +710,7 @@ def ticket_close(
     """
     from .status import TERMINAL_STATUSES
 
+    output_format = _validate_output_format(output_format)
     if status not in TERMINAL_STATUSES:
         typer.echo(
             f"--status must be one of {sorted(TERMINAL_STATUSES)}; got {status!r}",
@@ -467,21 +755,39 @@ def ticket_close(
     }
     verb, past = verb_by_status.get(status, (status.capitalize(), status))
 
-    subprocess.run(["git", "-C", str(root), "add", rel], check=True)
-    subprocess.run(
-        ["git", "-C", str(root), "commit", "-m", f"{verb} ticket {ticket_id}: {title}"],
-        check=True,
-    )
+    commit_cmd = ["git", "-C", str(root), "commit", "-m", f"{verb} ticket {ticket_id}: {title}"]
+    if output_format == "json":
+        subprocess.run(
+            ["git", "-C", str(root), "add", rel],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        commit_result = subprocess.run(
+            commit_cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    else:
+        subprocess.run(["git", "-C", str(root), "add", rel], check=True)
+        commit_result = subprocess.run(commit_cmd, check=True)
 
+    push_ok: bool | None = None
+    push_error: str | None = None
     if push:
         push_result = subprocess.run(
             ["git", "-C", str(root), "push"],
             capture_output=True,
             text=True,
         )
+        push_ok = push_result.returncode == 0
         if push_result.returncode != 0:
-            typer.echo(f"push failed (non-fatal): {push_result.stderr.strip()}", err=True)
+            push_error = push_result.stderr.strip()
+            typer.echo(f"push failed (non-fatal): {push_error}", err=True)
 
+    telegram_ok: bool | None = None
+    telegram_error: str | None = None
     if telegram:
         text_lines = [f"{ticket_id} {past}: {title}"]
         if summary:
@@ -489,9 +795,38 @@ def ticket_close(
             text_lines.append(summary)
         try:
             send_message("\n".join(text_lines))
+            telegram_ok = True
         except Exception as e:
-            typer.echo(f"Telegram send failed (non-fatal): {e}", err=True)
+            telegram_ok = False
+            telegram_error = str(e)
+            typer.echo(f"Telegram send failed (non-fatal): {telegram_error}", err=True)
 
+    if output_format == "json":
+        _echo_json({
+            "ticket": _ticket_payload(
+                post=post,
+                path=path,
+                root=root,
+                include_content=True,
+            ),
+            "commit": {
+                "command": commit_cmd,
+                "ok": True,
+                "stdout": getattr(commit_result, "stdout", "") or "",
+                "stderr": getattr(commit_result, "stderr", "") or "",
+            },
+            "push": {
+                "attempted": push,
+                "ok": push_ok,
+                "error": push_error,
+            },
+            "telegram": {
+                "attempted": telegram,
+                "ok": telegram_ok,
+                "error": telegram_error,
+            },
+        })
+        return
     typer.echo(f"{past.capitalize()}: {rel}")
 
 
@@ -506,8 +841,15 @@ def dispatch_prep(
         Path("/tmp"), "--output-dir",
         help="Where to write the prompt file + capture file",
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
 ) -> None:
     """Prepare a ticket dispatch: compose prompt, optionally create worktree, print runtime command."""
+    output_format = _validate_output_format(output_format)
     root = find_root()
     path = _find_ticket(root, query)
     try:
@@ -520,6 +862,10 @@ def dispatch_prep(
     except (ValueError, NotImplementedError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1)
+
+    if output_format == "json":
+        _echo_json({"dispatch": _dispatch_prep_payload(prep)})
+        return
 
     typer.echo(f"ticket:   {prep.ticket_id}")
     typer.echo(f"assignee: {prep.assignee}")
@@ -548,6 +894,12 @@ def dispatch_fan_out(
     run: bool = typer.Option(
         False, "--run", help="Launch all dispatches in parallel now and wait for completion",
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
 ) -> None:
     """Dispatch the same ticket to multiple agents in parallel.
 
@@ -556,6 +908,15 @@ def dispatch_fan_out(
     """
     import subprocess
     import time
+
+    output_format = _validate_output_format(output_format)
+    if output_format == "json" and run:
+        typer.echo(
+            "`livery dispatch fan-out --run` does not support --format json yet; "
+            "use JSON prep output, then launch the returned commands.",
+            err=True,
+        )
+        raise typer.Exit(1)
 
     root = find_root()
     path = _find_ticket(root, query)
@@ -572,6 +933,14 @@ def dispatch_fan_out(
     except (ValueError, NotImplementedError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1)
+
+    if output_format == "json":
+        _echo_json({
+            "ticket_id": preps[0].ticket_id,
+            "count": len(preps),
+            "dispatches": [_dispatch_prep_payload(prep) for prep in preps],
+        })
+        return
 
     typer.echo(f"ticket: {preps[0].ticket_id}")
     typer.echo(f"fanning out to {len(preps)} agents:")
@@ -740,6 +1109,12 @@ def dispatch_status(
         None, "--since-minutes",
         help="Only show dispatches whose output file was written in the last N minutes.",
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
 ) -> None:
     """Roll-up of every dispatch the framework can see.
 
@@ -752,6 +1127,8 @@ def dispatch_status(
 
     from .attempts import AttemptStatus
 
+    output_format = _validate_output_format(output_format)
+
     # Find the workspace root if the user is inside one. attempts-aware
     # listing needs it; otherwise we fall back to /tmp-only scanning.
     try:
@@ -763,6 +1140,14 @@ def dispatch_status(
     if since_minutes is not None:
         cutoff = since_minutes * 60
         views = [v for v in views if v.age_seconds <= cutoff]
+
+    if output_format == "json":
+        _echo_json({
+            "workspace_root": str(workspace_root) if workspace_root else None,
+            "output_dir": str(output_dir),
+            "dispatches": [_dispatch_view_payload(view) for view in views],
+        })
+        return
 
     if not views:
         where = "attempts dir or " if workspace_root else ""
@@ -852,6 +1237,11 @@ def dispatch_tail(
         20, "-n", "--lines",
         help="How many trailing lines to print on a one-shot tail.",
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
 ) -> None:
     """Print (or follow) the output of a specific dispatch.
 
@@ -859,6 +1249,11 @@ def dispatch_tail(
     `<ticket-id>-<assignee>` label. Errors if zero or multiple match.
     """
     import subprocess
+
+    output_format = _validate_output_format(output_format)
+    if output_format == "json" and follow:
+        typer.echo("`livery dispatch tail --follow` cannot emit JSON.", err=True)
+        raise typer.Exit(1)
 
     try:
         ws_root = find_root()
@@ -878,6 +1273,14 @@ def dispatch_tail(
             err=True,
         )
         raise typer.Exit(1)
+
+    if output_format == "json":
+        _echo_json({
+            "dispatch": _dispatch_view_payload(view),
+            "lines": lines,
+            "content": _tail_text(view.path, lines),
+        })
+        return
 
     typer.echo(f"# {view.path}\n", err=True)
     if follow:
@@ -960,7 +1363,7 @@ def init(
         """Interactive prompt for a colliding skill/command file at `path`.
 
         The user's existing skill/command might serve a real purpose (e.g.,
-        a pre-existing `/ticket` command from another tool). Default
+        a pre-existing ticket command from another tool). Default
         offer is rename — let the user keep their thing functional under
         a different name — with skip and overwrite as alternatives.
         """
@@ -1126,13 +1529,38 @@ def link_repo(
 
 
 @app.command("where")
-def where() -> None:
+def where(
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
+) -> None:
     """Show which Livery workspace the current directory resolves to."""
+    output_format = _validate_output_format(output_format)
     try:
         resolved = resolve_workspace()
     except RuntimeError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1)
+
+    if output_format == "json":
+        _echo_json({
+            "resolution": {
+                "kind": resolved.kind,
+                "workspace_root": str(resolved.workspace_root),
+                "marker_path": str(resolved.marker_path),
+                "linked_repo_root": (
+                    str(resolved.linked_repo_root)
+                    if resolved.linked_repo_root
+                    else None
+                ),
+                "repo_id": resolved.repo_id,
+                "workspace_id": resolved.workspace_id,
+            }
+        })
+        return
 
     typer.echo(f"Workspace: {resolved.workspace_root}")
     typer.echo(f"Source:    {resolved.kind}")
@@ -1247,6 +1675,12 @@ def status(
         False, "--full",
         help="Show every closed ticket instead of just the most recent few.",
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
 ) -> None:
     """At-a-glance dashboard for the workspace.
 
@@ -1256,9 +1690,14 @@ def status(
     """
     import sys
 
+    output_format = _validate_output_format(output_format)
     root = find_root()
     closed_limit = None if full else DEFAULT_RECENT_CLOSED_LIMIT
     report = compute_status(root, stale_days=stale_days, recent_closed_limit=closed_limit)
+
+    if output_format == "json":
+        _echo_json(_status_report_payload(report))
+        return
 
     use_color = sys.stdout.isatty()
 

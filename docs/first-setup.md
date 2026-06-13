@@ -138,21 +138,22 @@ my-first-company/
 │   ├── lessons/
 │   └── preferences/
 ├── .claude/                         # Claude Code skill discovery
-│   ├── commands/hello.md            # /hello orientation command
-│   ├── commands/ticket.md           # /ticket slash command
-│   ├── commands/walkie.md           # /walkie slash command
+│   ├── commands/livery/             # grouped Livery slash commands
+│   │   ├── hello.md                 # Livery orientation command
+│   │   ├── ticket.md                # Livery ticket command
+│   │   └── walkie.md                # Livery walkie command
 │   └── skills/
-│       ├── hello/SKILL.md
-│       ├── new-ticket/SKILL.md
-│       └── walkie-talkie/SKILL.md
+│       ├── livery-hello/SKILL.md
+│       ├── livery-new-ticket/SKILL.md
+│       └── livery-walkie-talkie/SKILL.md
 └── .agents/                         # Codex skill discovery (.agents/skills)
     └── skills/
-        ├── hello/SKILL.md
-        ├── new-ticket/SKILL.md
-        └── walkie-talkie/SKILL.md
+        ├── livery-hello/SKILL.md
+        ├── livery-new-ticket/SKILL.md
+        └── livery-walkie-talkie/SKILL.md
 ```
 
-`CLAUDE.md` and `AGENTS.md` have identical content — they're named for the two engines that auto-load them. The shipped `hello`, `new-ticket`, and `walkie-talkie` skills are scaffolded under `.claude/` for Claude Code and `.agents/` for Codex. Delete whichever pair you don't use, or keep both if you move between engines.
+`CLAUDE.md` and `AGENTS.md` have identical content — they're named for the two engines that auto-load them. The shipped `livery-hello`, `livery-new-ticket`, and `livery-walkie-talkie` skills are scaffolded under `.claude/` for Claude Code and `.agents/` for Codex. Claude Code slash commands are grouped under `.claude/commands/livery/` so they do not occupy generic harness command names. Delete whichever pair you don't use, or keep both if you move between engines.
 
 If you used `--cos-engine claude_code`, only `CLAUDE.md` and `.claude/` get scaffolded. If you used `--cos-engine codex`, only `AGENTS.md` and `.agents/` get scaffolded — no stray Claude-specific files in your workspace. Pi and OpenCode use `AGENTS.md` but do not need Claude/Codex skill directories.
 
@@ -264,7 +265,7 @@ opencode                           # OpenCode — auto-loads AGENTS.md
 
 Whichever you opened, the engine reads its convention file (`CLAUDE.md` or `AGENTS.md`) and takes the role of **your CoS** for this company. CoS engines work the same way for Livery — it's all shell commands, ticket markdown, and conversation. Talk to the CoS like you would a chief of staff:
 
-- "Hello." or `/hello` → it runs `livery session-brief`, acknowledges the workspace or linked repo, then runs `livery status`.
+- "Hello." or the Livery hello command/skill → it runs `livery session-brief`, acknowledges the workspace or linked repo, then runs `livery status`.
 - "What do we have going on today?" → it runs `livery ticket list`.
 - "I want to write a blog post about X. File a ticket for the writer agent." → it files a ticket.
 - "Dispatch that ticket." → it composes the prompt and kicks off the dispatch.

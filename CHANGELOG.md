@@ -4,6 +4,14 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Added
+- Harness-first JSON API surface. Ticket, memory, dispatch, `where`, and `status` commands now support `--format json` with a top-level `schema_version`, so Codex/Claude skills can call Livery as a stable local API instead of scraping human-readable CLI output.
+- `docs/harness-api.md` documents the intended layering: harness skills/slash commands as UI, CLI JSON commands as API, Python as kernel, markdown/TOML/JSON files as durable state.
+
+### Changed
+- New workspace scaffolds use visibly Livery-owned harness names: Claude slash commands are grouped under `.claude/commands/livery/`, and Claude/Codex skills are named `livery-hello`, `livery-new-ticket`, and `livery-walkie-talkie`. This avoids occupying generic harness names such as `hello`, `ticket`, or `walkie`.
+- `upgrade-workspace` backfills the new namespaced harness assets without deleting older generic assets from existing workspaces.
+
 ## 0.14.0 — 2026-06-12
 
 ### Added

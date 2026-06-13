@@ -71,16 +71,16 @@ def test_init_workspace_creates_standard_layout(tmp_path):
     assert Path("memory/lessons/.gitkeep") in paths
     assert Path("memory/preferences/.gitkeep") in paths
     # Claude Code assets
-    assert Path(".claude/commands/hello.md") in paths
-    assert Path(".claude/commands/ticket.md") in paths
-    assert Path(".claude/commands/walkie.md") in paths
-    assert Path(".claude/skills/hello/SKILL.md") in paths
-    assert Path(".claude/skills/new-ticket/SKILL.md") in paths
-    assert Path(".claude/skills/walkie-talkie/SKILL.md") in paths
+    assert Path(".claude/commands/livery/hello.md") in paths
+    assert Path(".claude/commands/livery/ticket.md") in paths
+    assert Path(".claude/commands/livery/walkie.md") in paths
+    assert Path(".claude/skills/livery-hello/SKILL.md") in paths
+    assert Path(".claude/skills/livery-new-ticket/SKILL.md") in paths
+    assert Path(".claude/skills/livery-walkie-talkie/SKILL.md") in paths
     # Codex assets
-    assert Path(".agents/skills/hello/SKILL.md") in paths
-    assert Path(".agents/skills/new-ticket/SKILL.md") in paths
-    assert Path(".agents/skills/walkie-talkie/SKILL.md") in paths
+    assert Path(".agents/skills/livery-hello/SKILL.md") in paths
+    assert Path(".agents/skills/livery-new-ticket/SKILL.md") in paths
+    assert Path(".agents/skills/livery-walkie-talkie/SKILL.md") in paths
 
 
 def test_init_workspace_writes_default_runtime_and_telegram(tmp_path):
@@ -123,13 +123,13 @@ def test_init_workspace_cos_engine_claude_code_only(tmp_path):
     assert (target / "CLAUDE.md").exists()
     assert not (target / "AGENTS.md").exists()
     # Claude Code skill scaffolding present
-    assert (target / ".claude" / "skills" / "hello" / "SKILL.md").exists()
-    assert (target / ".claude" / "skills" / "new-ticket" / "SKILL.md").exists()
-    assert (target / ".claude" / "commands" / "hello.md").exists()
-    assert (target / ".claude" / "commands" / "ticket.md").exists()
+    assert (target / ".claude" / "skills" / "livery-hello" / "SKILL.md").exists()
+    assert (target / ".claude" / "skills" / "livery-new-ticket" / "SKILL.md").exists()
+    assert (target / ".claude" / "commands" / "livery" / "hello.md").exists()
+    assert (target / ".claude" / "commands" / "livery" / "ticket.md").exists()
     # Walkie-talkie skill + slash command present
-    assert (target / ".claude" / "skills" / "walkie-talkie" / "SKILL.md").exists()
-    assert (target / ".claude" / "commands" / "walkie.md").exists()
+    assert (target / ".claude" / "skills" / "livery-walkie-talkie" / "SKILL.md").exists()
+    assert (target / ".claude" / "commands" / "livery" / "walkie.md").exists()
     # Codex skill scaffolding absent
     assert not (target / ".agents").exists()
 
@@ -140,11 +140,11 @@ def test_init_workspace_cos_engine_codex_only(tmp_path):
     assert (target / "AGENTS.md").exists()
     assert not (target / "CLAUDE.md").exists()
     # Codex skill scaffolding present at the .agents/ path
-    assert (target / ".agents" / "skills" / "hello" / "SKILL.md").exists()
-    assert (target / ".agents" / "skills" / "new-ticket" / "SKILL.md").exists()
+    assert (target / ".agents" / "skills" / "livery-hello" / "SKILL.md").exists()
+    assert (target / ".agents" / "skills" / "livery-new-ticket" / "SKILL.md").exists()
     # Walkie-talkie skill installed for Codex too — initiating from
     # either harness must work
-    assert (target / ".agents" / "skills" / "walkie-talkie" / "SKILL.md").exists()
+    assert (target / ".agents" / "skills" / "livery-walkie-talkie" / "SKILL.md").exists()
     # No .claude/ directory at all — Codex doesn't read it
     assert not (target / ".claude").exists()
 
@@ -185,9 +185,9 @@ def test_init_workspace_multiple_engines_dedupe_filenames(tmp_path):
     # AGENTS.md scaffolded once even though three engines want it
     assert sum(1 for p in paths if str(p) == "AGENTS.md") == 1
     # Codex still gets its skill dir; pi/opencode don't add anything
-    assert Path(".agents/skills/hello/SKILL.md") in paths
-    assert Path(".agents/skills/new-ticket/SKILL.md") in paths
-    assert Path(".agents/skills/walkie-talkie/SKILL.md") in paths
+    assert Path(".agents/skills/livery-hello/SKILL.md") in paths
+    assert Path(".agents/skills/livery-new-ticket/SKILL.md") in paths
+    assert Path(".agents/skills/livery-walkie-talkie/SKILL.md") in paths
     # CLAUDE.md not requested
     assert not (target / "CLAUDE.md").exists()
 
@@ -287,9 +287,9 @@ def test_init_writes_fresh_template_when_no_existing_convention_file(tmp_path):
 def test_init_skips_user_written_skill_by_default(tmp_path):
     """No callback → user's skill is left in place; Livery's is NOT installed."""
     target = tmp_path / "ws"
-    skill_path = target / ".claude" / "skills" / "new-ticket" / "SKILL.md"
+    skill_path = target / ".claude" / "skills" / "livery-new-ticket" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
-    user_content = "---\nname: new-ticket\ndescription: my own ticket flow\n---\n\nUser-written.\n"
+    user_content = "---\nname: livery-new-ticket\ndescription: my own ticket flow\n---\n\nUser-written.\n"
     skill_path.write_text(user_content)
 
     result = init_workspace(target=target, name="ws", cos_engine="claude_code")
@@ -303,11 +303,11 @@ def test_init_skips_user_written_skill_by_default(tmp_path):
 def test_init_no_op_replaces_livery_managed_skill(tmp_path):
     """Existing skill that's already Livery-managed → no-op refresh, no skip."""
     target = tmp_path / "ws"
-    skill_path = target / ".claude" / "skills" / "new-ticket" / "SKILL.md"
+    skill_path = target / ".claude" / "skills" / "livery-new-ticket" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
     # Use a stub with the marker to claim "this is ours"
     skill_path.write_text(
-        "---\nname: new-ticket\ndescription: stale livery version\nlivery: managed\n---\n\nstale.\n"
+        "---\nname: livery-new-ticket\ndescription: stale livery version\nlivery: managed\n---\n\nstale.\n"
     )
 
     result = init_workspace(target=target, name="ws", cos_engine="claude_code")
@@ -322,11 +322,11 @@ def test_init_no_op_replaces_livery_managed_skill(tmp_path):
 def test_init_renames_user_skill_via_callback(tmp_path):
     """Callback returns rename → user's skill folder is renamed, Livery's installed at original path."""
     target = tmp_path / "ws"
-    skill_dir = target / ".claude" / "skills" / "new-ticket"
+    skill_dir = target / ".claude" / "skills" / "livery-new-ticket"
     skill_dir.mkdir(parents=True)
     skill_path = skill_dir / "SKILL.md"
     skill_path.write_text(
-        "---\nname: new-ticket\ndescription: my custom ticket flow\n---\n\nUser-written content.\n"
+        "---\nname: livery-new-ticket\ndescription: my custom ticket flow\n---\n\nUser-written content.\n"
     )
 
     result = init_workspace(
@@ -360,7 +360,8 @@ def test_init_renames_user_command_via_callback(tmp_path):
     target = tmp_path / "ws"
     cmd_dir = target / ".claude" / "commands"
     cmd_dir.mkdir(parents=True)
-    cmd_path = cmd_dir / "ticket.md"
+    cmd_path = cmd_dir / "livery" / "ticket.md"
+    cmd_path.parent.mkdir(parents=True, exist_ok=True)
     cmd_path.write_text("---\ndescription: user's command\n---\n\nUser flow.\n")
 
     init_workspace(
@@ -371,8 +372,8 @@ def test_init_renames_user_command_via_callback(tmp_path):
     )
 
     # User's command is at the new name
-    assert (cmd_dir / "my-ticket.md").exists()
-    assert "User flow." in (cmd_dir / "my-ticket.md").read_text()
+    assert (cmd_dir / "livery" / "my-ticket.md").exists()
+    assert "User flow." in (cmd_dir / "livery" / "my-ticket.md").read_text()
 
     # Livery's command is at the original path
     assert cmd_path.exists()
@@ -382,9 +383,9 @@ def test_init_renames_user_command_via_callback(tmp_path):
 def test_init_overwrite_callback_replaces_user_skill(tmp_path):
     """Callback returns overwrite → user's skill is replaced. Destructive."""
     target = tmp_path / "ws"
-    skill_path = target / ".claude" / "skills" / "new-ticket" / "SKILL.md"
+    skill_path = target / ".claude" / "skills" / "livery-new-ticket" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
-    skill_path.write_text("---\nname: new-ticket\n---\n\nUser content gone.\n")
+    skill_path.write_text("---\nname: livery-new-ticket\n---\n\nUser content gone.\n")
 
     init_workspace(
         target=target,
@@ -403,9 +404,9 @@ def test_init_rename_collision_raises(tmp_path):
     """If the user-chosen rename target already exists, init raises FileExistsError."""
     target = tmp_path / "ws"
     skills_dir = target / ".claude" / "skills"
-    (skills_dir / "new-ticket").mkdir(parents=True)
-    (skills_dir / "new-ticket" / "SKILL.md").write_text(
-        "---\nname: new-ticket\n---\n\nuser.\n"
+    (skills_dir / "livery-new-ticket").mkdir(parents=True)
+    (skills_dir / "livery-new-ticket" / "SKILL.md").write_text(
+        "---\nname: livery-new-ticket\n---\n\nuser.\n"
     )
     # Pre-existing folder at the proposed rename target
     (skills_dir / "legacy-ticket").mkdir(parents=True)

@@ -19,9 +19,22 @@ Tech-savvy operators (not necessarily programmers) who want an AI workforce on t
 - **Runtime adapters** so agents can live on different stacks: Claude Code CLI, Codex CLI, Cursor, LM Studio, Ollama. Adding a new adapter is ~30 lines of Python.
 - **Durable dispatch attempts** under `.livery/dispatch/attempts/`, with status, PID, failures, hook outcomes, prompt path, and output path recorded per run.
 - **Walkie-Talkie** for structured AI-to-AI debate, either manual append-only transcripts or automated alternating dispatches between two hired agents.
-- **Discoverability commands, startup hooks, and a hello skill** so CoS sessions can ask Livery what applies from the current directory instead of guessing from stale docs.
+- **Discoverability commands, startup hooks, and a Livery hello skill** so CoS sessions can ask Livery what applies from the current directory instead of guessing from stale docs.
 - **Telegram integration** — close a ticket, get a ping.
 - **CoS convention files** for Claude Code, Codex, Pi, and OpenCode, plus slash commands and skills where those engines support them.
+
+## Harness-first API
+
+Livery's primary UI is the agentic harness. The Python CLI is the local kernel:
+it owns workspace discovery, file mutations, git/worktree operations, dispatch
+attempt records, and upgrade compatibility. Harness skills and slash commands
+call that kernel.
+
+Most human commands keep readable text as the default, and the primary resource
+commands also expose `--format json` for harnesses and scripts. Use JSON when a
+tool needs to create tickets, inspect status, search memory, prepare dispatches,
+or read dispatch output without scraping prose. See
+[`docs/harness-api.md`](docs/harness-api.md).
 
 ## Status
 
@@ -94,7 +107,7 @@ livery init                             # scaffolds CLAUDE.md + AGENTS.md by def
 livery doctor                           # see which runtimes are reachable
 livery hire writer                      # hire your first agent (interactive wizard)
 livery install-agent-hooks              # make Codex / Claude Code start Livery-aware
-# Manual session entry: `/hello` in Claude Code, or the `hello` skill in Codex.
+# Manual session entry: the Livery hello command/skill in your harness.
 
 # From a project repo, point local livery commands back at this workspace
 cd ~/code/my-project
@@ -127,7 +140,7 @@ livery ticket close <ticket-id> --status cancelled --summary "Folded into the ne
 
 `livery next`, `livery capabilities`, and `livery session-brief` are intentionally useful to both humans and CoS agents. Add `--format json` when Codex, Claude Code, or another tool needs structured output instead of prose. `livery install-agent-hooks` wires `session-brief` into Codex / Claude Code `SessionStart` hooks for the current workspace or linked repo.
 
-If hooks are not installed or you want an explicit session handshake, use the shipped hello entry point. Claude Code gets `/hello`; Codex gets the `hello` skill. It runs `livery session-brief`, acknowledges the active workspace or linked repo, then runs `livery status` for a quick board check.
+If hooks are not installed or you want an explicit session handshake, use the shipped Livery hello entry point. Claude Code gets a grouped Livery slash command; Codex gets the `livery-hello` skill. It runs `livery session-brief`, acknowledges the active workspace or linked repo, then runs `livery status` for a quick board check.
 
 ## Workspace layout
 
@@ -147,21 +160,22 @@ my-workspace/
 ├── walkie-talkie/                             # append-only AI-to-AI debate transcripts, created on first use
 ├── .livery/                                   # ignored runtime state: dispatch attempts, hook logs, walkie prompts
 ├── .claude/                                   # Claude Code's skill discovery dir
-│   ├── commands/hello.md                      # /hello orientation command
-│   ├── commands/ticket.md                     # /ticket slash command
-│   ├── commands/walkie.md                     # /walkie slash command
+│   ├── commands/livery/                       # grouped Livery slash commands
+│   │   ├── hello.md                           # Livery orientation command
+│   │   ├── ticket.md                          # Livery ticket command
+│   │   └── walkie.md                          # Livery walkie command
 │   └── skills/
-│       ├── hello/SKILL.md
-│       ├── new-ticket/SKILL.md
-│       └── walkie-talkie/SKILL.md
+│       ├── livery-hello/SKILL.md
+│       ├── livery-new-ticket/SKILL.md
+│       └── livery-walkie-talkie/SKILL.md
 └── .agents/                                   # Codex's skill discovery dir (.agents/skills)
     └── skills/
-        ├── hello/SKILL.md
-        ├── new-ticket/SKILL.md
-        └── walkie-talkie/SKILL.md
+        ├── livery-hello/SKILL.md
+        ├── livery-new-ticket/SKILL.md
+        └── livery-walkie-talkie/SKILL.md
 ```
 
-`CLAUDE.md` and `AGENTS.md` are the same content with different names — one for each engine's convention. Same with shipped skills: they live in `.claude/skills/` for Claude Code and `.agents/skills/` for Codex. `--cos-engine claude_code` skips the `.agents/` directory; `--cos-engine codex` skips `.claude/`. `--cos-engine pi` and `--cos-engine opencode` scaffold their `AGENTS.md`-style convention files without Claude/Codex-specific skill directories.
+`CLAUDE.md` and `AGENTS.md` are the same content with different names — one for each engine's convention. Same with shipped skills: they live in `.claude/skills/` for Claude Code and `.agents/skills/` for Codex. Claude Code slash commands live under `.claude/commands/livery/` so they stay grouped as Livery commands. `--cos-engine claude_code` skips the `.agents/` directory; `--cos-engine codex` skips `.claude/`. `--cos-engine pi` and `--cos-engine opencode` scaffold their `AGENTS.md`-style convention files without Claude/Codex-specific skill directories.
 
 ## Configuration (`livery.toml`)
 

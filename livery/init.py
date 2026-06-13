@@ -85,6 +85,12 @@ SUPPORTED_COS_ENGINES: tuple[str, ...] = tuple(list(COS_ENGINES.keys()) + ["both
 # The framework-managed block written inside every convention file. This
 # is what `livery upgrade-workspace` regenerates when Livery ships
 # improved defaults; user content above or below the markers is preserved.
+LIVERY_COMMAND_GROUP = "livery"
+LIVERY_HELLO_SKILL_NAME = "livery-hello"
+LIVERY_NEW_TICKET_SKILL_NAME = "livery-new-ticket"
+LIVERY_WALKIE_SKILL_NAME = "livery-walkie-talkie"
+
+
 COS_MANAGED_BLOCK = """\
 # Livery framework conventions
 
@@ -146,11 +152,13 @@ you, not the intern-compliance version.
   `livery next`.
 - When you need the full feature menu, run `livery capabilities`.
 - When the user wants a fresh orientation to the current workspace, use the
-  shipped hello command/skill. It runs `livery session-brief` and a quick
+  shipped Livery hello command/skill. It runs `livery session-brief` and a quick
   `livery status` check so the session starts grounded in live workspace
   state.
 - When acting programmatically or advising another agent, prefer structured
-  output: `livery next --format json` and `livery capabilities --format json`.
+  output: `livery next --format json`, `livery capabilities --format json`,
+  and `--format json` on ticket, memory, dispatch, where, and status
+  commands. Parse JSON instead of scraping human-readable text.
 - If Livery-managed SessionStart hooks are installed, read the injected
   `livery session-brief` carefully. It tells you whether the current directory
   is a workspace or linked repo, includes a concise status summary, and asks
@@ -204,8 +212,9 @@ Steps:
    - **assignee** — agent id from `agents/<id>/`, `cos` for the CoS session, or leave blank
    - **description** — one paragraph stating the goal
    - **context** (optional) — links, constraints, prior decisions
-2. Run `livery ticket new --title "..." --assignee <id|cos> --description "..." [--context "..."]`.
-3. Show the user the created file path and ticket id.
+2. Run `livery ticket new --title "..." --assignee <id|cos> --description "..." [--context "..."] --format json`.
+   If assignee is blank, omit `--assignee`.
+3. Show the user the created ticket id and relative path from the JSON.
 """
 
 HELLO_SLASH = """---
@@ -216,20 +225,21 @@ livery: managed
 Help the user start from live Livery context.
 
 Steps:
-1. Run `livery session-brief --format text`.
+1. Run `livery session-brief --format json`.
 2. If the brief says this is not Livery-aware, tell the user exactly that
    and suggest `livery next`.
 3. If the brief finds a workspace or linked repo, briefly acknowledge the
    workspace path and whether this session is in the workspace or a linked
    repo.
-4. Run `livery status` for a quick board check.
-5. Summarize the useful status signals: open tickets by assignee, blocked
-   and stale counts, recent closes if shown, and any obvious next action.
+4. Run `livery status --format json` for a quick board check.
+5. Summarize the useful JSON status signals: open tickets by assignee,
+   blocked and stale counts, recent closes if present, and any obvious next
+   action.
 """
 
 NEW_TICKET_SKILL = """---
-name: new-ticket
-description: Create a new Livery ticket to track work or delegate to an agent. Use when the user says "create a ticket", "new ticket", "file a ticket", invokes `/ticket`, or describes a unit of work that should be formalized.
+name: livery-new-ticket
+description: Create a new Livery ticket to track work or delegate to an agent. Use when the user says "create a ticket", "new ticket", "file a ticket", invokes the Livery ticket command, or describes a unit of work that should be formalized.
 livery: managed
 ---
 
@@ -239,7 +249,7 @@ Livery tracks work as markdown tickets in `tickets/<YYYY-MM-DD>-<NNN>-<slug>.md`
 
 ## When to invoke
 
-- User types `/ticket` or asks to "create/file/open a ticket"
+- User asks to "create/file/open a ticket" or invokes the Livery ticket command
 - User describes a unit of work that belongs in the backlog or should be delegated to another agent
 
 ## Fields
@@ -252,14 +262,15 @@ Livery tracks work as markdown tickets in `tickets/<YYYY-MM-DD>-<NNN>-<slug>.md`
 ## Steps
 
 1. Gather missing fields conversationally.
-2. Run `livery ticket new --title "..." --assignee <id|cos|null> --description "..." [--context "..."]`.
-3. Show the created path.
+2. Run `livery ticket new --title "..." --assignee <id|cos> --description "..." [--context "..."] --format json`.
+   If assignee is blank, omit `--assignee`.
+3. Show the created ticket id and relative path from the JSON.
 """
 
 
 HELLO_SKILL = """---
-name: hello
-description: Orient the current AI session to a Livery workspace or linked repo. Use when the user says hello, asks for a workspace check-in, asks "where are we?", invokes `/hello`, or wants the session to recognize Livery context before doing work.
+name: livery-hello
+description: Orient the current AI session to a Livery workspace or linked repo. Use when the user asks for a Livery workspace check-in, asks "where are we?", invokes the Livery hello command, or wants the session to recognize Livery context before doing work.
 livery: managed
 ---
 
@@ -269,7 +280,7 @@ Use this skill to ground the current session in live Livery state.
 
 ## Steps
 
-1. Run `livery session-brief --format text`.
+1. Run `livery session-brief --format json`.
 2. If the brief says this directory is not Livery-aware:
    - Say that plainly.
    - Do not claim there is an active workspace.
@@ -278,7 +289,7 @@ Use this skill to ground the current session in live Livery state.
    - Briefly acknowledge the workspace path.
    - Say whether the current directory is the workspace itself or a linked
      repo.
-4. Run `livery status`.
+4. Run `livery status --format json`.
 5. Give a concise check-in:
    - open ticket counts by assignee
    - blocked and stale counts
@@ -314,8 +325,8 @@ follow it strictly.
 
 
 WALKIE_SKILL = """---
-name: walkie-talkie
-description: Participate in a turn-based async debate with another AI session via a shared markdown file. Use when starting or continuing a Walkie-Talkie, or when the user says "let's walkie-talkie with codex/claude/etc on X".
+name: livery-walkie-talkie
+description: Participate in a turn-based async debate with another AI session via a shared markdown file. Use when starting or continuing a Livery Walkie-Talkie, or when the user says "let's walkie-talkie with codex/claude/etc on X".
 livery: managed
 ---
 
@@ -328,7 +339,7 @@ decision by debating in a shared file.
 ## When to invoke
 
 - User asks to "walkie-talkie with <peer> about <topic>"
-- User invokes `/walkie`
+- User invokes the Livery walkie command
 - The user is already in an active walkie (file under
   `<workspace>/walkie-talkie/`) and is asking you to take a turn
 
@@ -681,12 +692,13 @@ def init_workspace(
     for eid in engine_ids:
         engine = COS_ENGINES[eid]
         if engine.commands_dir:
-            _install_skill_file(target / engine.commands_dir / "hello.md", HELLO_SLASH)
-            _install_skill_file(target / engine.commands_dir / "ticket.md", TICKET_SLASH)
-            _install_skill_file(target / engine.commands_dir / "walkie.md", WALKIE_SLASH)
+            command_group = target / engine.commands_dir / LIVERY_COMMAND_GROUP
+            _install_skill_file(command_group / "hello.md", HELLO_SLASH)
+            _install_skill_file(command_group / "ticket.md", TICKET_SLASH)
+            _install_skill_file(command_group / "walkie.md", WALKIE_SLASH)
         if engine.skills_dir:
-            _install_skill_file(target / engine.skills_dir / "hello" / "SKILL.md", HELLO_SKILL)
-            _install_skill_file(target / engine.skills_dir / "new-ticket" / "SKILL.md", NEW_TICKET_SKILL)
-            _install_skill_file(target / engine.skills_dir / "walkie-talkie" / "SKILL.md", WALKIE_SKILL)
+            _install_skill_file(target / engine.skills_dir / LIVERY_HELLO_SKILL_NAME / "SKILL.md", HELLO_SKILL)
+            _install_skill_file(target / engine.skills_dir / LIVERY_NEW_TICKET_SKILL_NAME / "SKILL.md", NEW_TICKET_SKILL)
+            _install_skill_file(target / engine.skills_dir / LIVERY_WALKIE_SKILL_NAME / "SKILL.md", WALKIE_SKILL)
 
     return result

@@ -154,7 +154,7 @@ def test_compute_plan_inserts_block_into_legacy_file(tmp_path):
 
 def test_compute_plan_warns_on_customized_skill(tmp_path):
     root = _fresh_workspace(tmp_path, cos_engine="claude_code")
-    skill_path = root / ".claude" / "skills" / "new-ticket" / "SKILL.md"
+    skill_path = root / ".claude" / "skills" / "livery-new-ticket" / "SKILL.md"
     skill_path.write_text(NEW_TICKET_SKILL + "\n# user-customized addition\n")
 
     plan = compute_plan(root)
@@ -165,7 +165,7 @@ def test_compute_plan_warns_on_customized_skill(tmp_path):
 
 def test_compute_plan_creates_missing_skill(tmp_path):
     root = _fresh_workspace(tmp_path, cos_engine="claude_code")
-    skill_path = root / ".claude" / "skills" / "new-ticket" / "SKILL.md"
+    skill_path = root / ".claude" / "skills" / "livery-new-ticket" / "SKILL.md"
     skill_path.unlink()
 
     plan = compute_plan(root)
@@ -176,9 +176,9 @@ def test_compute_plan_creates_missing_skill(tmp_path):
 
 def test_compute_plan_creates_missing_hello_assets(tmp_path):
     root = _fresh_workspace(tmp_path, cos_engine="both")
-    command_path = root / ".claude" / "commands" / "hello.md"
-    claude_skill_path = root / ".claude" / "skills" / "hello" / "SKILL.md"
-    codex_skill_path = root / ".agents" / "skills" / "hello" / "SKILL.md"
+    command_path = root / ".claude" / "commands" / "livery" / "hello.md"
+    claude_skill_path = root / ".claude" / "skills" / "livery-hello" / "SKILL.md"
+    codex_skill_path = root / ".agents" / "skills" / "livery-hello" / "SKILL.md"
     command_path.unlink()
     claude_skill_path.unlink()
     codex_skill_path.unlink()
@@ -198,8 +198,8 @@ def test_compute_plan_creates_missing_hello_assets(tmp_path):
 
 def test_compute_plan_creates_missing_walkie_assets(tmp_path):
     root = _fresh_workspace(tmp_path, cos_engine="claude_code")
-    command_path = root / ".claude" / "commands" / "walkie.md"
-    skill_path = root / ".claude" / "skills" / "walkie-talkie" / "SKILL.md"
+    command_path = root / ".claude" / "commands" / "livery" / "walkie.md"
+    skill_path = root / ".claude" / "skills" / "livery-walkie-talkie" / "SKILL.md"
     command_path.unlink()
     skill_path.unlink()
 
@@ -386,7 +386,7 @@ def test_apply_plan_writes_changes_idempotently(tmp_path):
 
 def test_apply_plan_skips_warned_items_without_force(tmp_path):
     root = _fresh_workspace(tmp_path, cos_engine="claude_code")
-    skill_path = root / ".claude" / "skills" / "new-ticket" / "SKILL.md"
+    skill_path = root / ".claude" / "skills" / "livery-new-ticket" / "SKILL.md"
     skill_path.write_text("custom skill content")
 
     plan = compute_plan(root)

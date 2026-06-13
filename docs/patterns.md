@@ -42,7 +42,7 @@ These commands accept `--format json`. CoS agents should use that structured out
 
 For Codex and Claude Code, `livery install-agent-hooks` installs a local `SessionStart` hook that injects `livery session-brief` automatically. The brief tells the CoS whether it is in the workspace itself or a linked repo, includes a compact status summary, and instructs it to acknowledge that context to the user at the start of the session.
 
-When hooks are not installed or you want an explicit check-in, use the shipped hello entry point (`/hello` in Claude Code, `hello` skill in Codex). It runs the same session brief and follows with `livery status`.
+When hooks are not installed or you want an explicit check-in, use the shipped Livery hello entry point. Claude Code gets a grouped Livery slash command, and Codex gets the `livery-hello` skill. It runs the same session brief and follows with `livery status`.
 
 ### Durable memory
 
@@ -130,7 +130,7 @@ Plus the **CoS** — your Claude Code session running in the workspace directory
 
 ### Workflow
 
-1. **You file a ticket**, either through conversation with the CoS (`/ticket` slash command) or directly (`livery ticket new --title "..." --assignee research"`).
+1. **You file a ticket**, either through conversation with the CoS using the Livery ticket command/skill or directly (`livery ticket new --title "..." --assignee research"`).
 2. **CoS discusses scope** with you, pushes back on anything unclear, then either handles it directly (for `assignee: cos` tickets) or prepares a dispatch for the named agent.
 3. **Dispatch runs in the background** with `livery dispatch prep <ticket> --worktree`. Output streams to `/tmp/livery-dispatch-<ticket>.out`. For engineering work you use `--worktree` so the agent can't step on your in-progress changes.
 4. **The agent finishes** with a `=== DISPATCH_SUMMARY ===` block stating what it did, what it touched, and any pushback it wants you to see.

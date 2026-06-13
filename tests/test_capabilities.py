@@ -142,7 +142,7 @@ def test_managed_cos_block_points_agents_to_discovery(tmp_path):
     content = (workspace / "AGENTS.md").read_text()
     assert "## Discoverability" in content
     assert "## Workspace memory" in content
-    assert "shipped hello command/skill" in content
+    assert "shipped Livery hello command/skill" in content
     assert "livery memory add/list/show/search" in content
     assert "livery next --format json" in content
     assert "livery capabilities --format json" in content
