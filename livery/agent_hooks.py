@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .linked_repo_assets import install_linked_repo_assets
 from .paths import WorkspaceResolution, resolve_workspace
 
 MANAGED_BEGIN = "# LIVERY-MANAGED:BEGIN agent-hooks"
@@ -241,7 +242,8 @@ def install_agent_hooks(
     engines: str = "codex,claude_code",
     force: bool = False,
 ) -> list[AgentHookResult]:
-    target = hook_target_dir(start)
+    resolution = resolve_workspace(start)
+    target = _hook_target_dir(resolution)
     selected = _parse_engines(engines)
     results: list[AgentHookResult] = []
     if "codex" in selected:
@@ -263,6 +265,20 @@ def install_agent_hooks(
             force=force,
         )
         results.append(_set_engine(result, "claude_code"))
+    if resolution.kind == "linked-repo" and resolution.linked_repo_root is not None:
+        for asset_result in install_linked_repo_assets(
+            repo_root=resolution.linked_repo_root,
+            engines=engines,
+            force=force,
+        ):
+            results.append(
+                AgentHookResult(
+                    asset_result.engine,
+                    asset_result.path,
+                    asset_result.status,
+                    asset_result.detail,
+                )
+            )
     return results
 
 

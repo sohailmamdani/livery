@@ -179,7 +179,13 @@ For Claude Code, Livery writes:
 
 - `.claude/settings.local.json` — adds a Livery-managed `SessionStart` hook that runs `livery session-brief --format text`.
 
-The startup brief tells the CoS whether the current directory is a workspace, linked repo, or legacy framework repo; includes concise workspace status; and instructs the CoS to acknowledge that Livery context to the user. Remove these entries with:
+The startup brief tells the CoS whether the current directory is a workspace, linked repo, or legacy framework repo; includes concise workspace status; and instructs the CoS to acknowledge that Livery context to the user.
+
+When run from a linked repo, `livery install-agent-hooks` also installs a small linked-repo harness overlay beside the project code. Claude Code gets `/livery-hello`, `/livery-new-ticket`, and `/livery-walkie-talkie`; Codex gets matching `livery-hello`, `livery-new-ticket`, and `livery-walkie-talkie` skills. These are materially different from the parent-workspace entrypoints: they first confirm the repo link, then tell the harness that Livery tickets and Walkie-Talkie transcripts are created in the parent workspace while repo-local paths and branch context still matter.
+
+To update a repo that was linked before this overlay existed, update Livery, `cd` into the linked repo, and run `livery install-agent-hooks` again. Livery updates managed linked-repo entrypoints and reports any user-written files it skipped.
+
+Remove the startup hook entries with:
 
 ```sh
 livery install-agent-hooks --uninstall

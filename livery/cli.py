@@ -33,6 +33,7 @@ from .init import (
     SkillCollisionResolution,
     init_workspace,
 )
+from .linked_repo_assets import install_linked_repo_assets
 from .memory import (
     MemoryEntry,
     create_memory_entry,
@@ -1527,6 +1528,21 @@ def link_repo(
     if excluded:
         typer.echo("Git exclude:      added .livery-link.toml to .git/info/exclude")
 
+    asset_results = install_linked_repo_assets(repo_root=repo_root)
+    if asset_results:
+        typer.echo("Harness entries:")
+        for r in asset_results:
+            typer.echo(f"  [{r.status}] {r.engine}: {r.path.relative_to(repo_root)}")
+            if r.detail:
+                typer.echo(f"           — {r.detail}")
+    if any(r.status == "skipped" for r in asset_results):
+        typer.echo(
+            "\nSome linked-repo harness entries were skipped because user-written files "
+            "already exist at those paths. Pass --force to `livery link` if you want "
+            "Livery to replace them.",
+            err=True,
+        )
+
 
 @app.command("where")
 def where(
@@ -1845,12 +1861,13 @@ def install_agent_hooks_cmd(
         help="Replace conflicting hook config where Livery can do so safely.",
     ),
 ) -> None:
-    """Install CoS SessionStart hooks that inject `livery session-brief`.
+    """Install CoS SessionStart hooks and linked-repo harness entries.
 
     The hooks are installed in the current Livery workspace or linked repo,
     not globally. They tell Codex / Claude Code that the directory is
     Livery-aware, inject a concise workspace status, and instruct the CoS to
-    acknowledge the detected workspace or linked repo to the user.
+    acknowledge the detected workspace or linked repo to the user. In a linked
+    repo, this also installs or refreshes local Livery command/skill entrypoints.
     """
     try:
         if uninstall:

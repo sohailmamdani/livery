@@ -48,7 +48,34 @@ def test_install_agent_hooks_targets_linked_repo_not_parent_workspace(tmp_path, 
     assert result.exit_code == 0, result.stdout + result.stderr
     assert (repo / ".codex" / "hooks.json").exists()
     assert (repo / ".claude" / "settings.local.json").exists()
+    codex_skill = repo / ".agents" / "skills" / "livery-new-ticket" / "SKILL.md"
+    claude_command = repo / ".claude" / "commands" / "livery-walkie-talkie.md"
+    assert "linked project repo" in codex_skill.read_text()
+    assert "parent workspace" in codex_skill.read_text()
+    assert "livery walkie new" in claude_command.read_text()
+    assert "parent workspace" in claude_command.read_text()
     assert not (workspace / ".codex").exists()
+
+
+def test_install_agent_hooks_preserves_user_linked_repo_entrypoints(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = tmp_path / "acme-livery"
+    init_workspace(target=workspace, name="acme")
+    repo = tmp_path / "acme-api"
+    repo.mkdir()
+    write_link(repo_root=repo, workspace_root=workspace, repo_id="api")
+    skill = repo / ".agents" / "skills" / "livery-new-ticket" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("---\nname: livery-new-ticket\n---\ncustom instructions\n")
+    monkeypatch.chdir(repo)
+
+    result = CliRunner().invoke(app, ["install-agent-hooks", "--engine", "codex"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert skill.read_text() == "---\nname: livery-new-ticket\n---\ncustom instructions\n"
+    assert "[skipped] codex" in result.stdout
 
 
 def test_install_agent_hooks_preserves_existing_session_start_groups(tmp_path, monkeypatch):

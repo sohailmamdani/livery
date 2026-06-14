@@ -341,6 +341,15 @@ def test_livery_link_command_writes_marker_and_git_exclude(tmp_path, monkeypatch
     assert f'workspace = "{workspace}"' in link_text
     assert 'repo_id = "api"' in link_text
     assert LINK_MARKER in (repo / ".git" / "info" / "exclude").read_text()
+    assert (repo / ".agents" / "skills" / "livery-hello" / "SKILL.md").exists()
+    assert (repo / ".claude" / "commands" / "livery-new-ticket.md").exists()
+    assert "linked project repo" in (
+        repo / ".agents" / "skills" / "livery-hello" / "SKILL.md"
+    ).read_text()
+    assert "parent workspace" in (
+        repo / ".claude" / "commands" / "livery-new-ticket.md"
+    ).read_text()
+    assert "Harness entries:" in result.stdout
 
 
 def test_livery_link_command_moves_existing_workspace(tmp_path, monkeypatch):

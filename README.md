@@ -113,6 +113,9 @@ livery install-agent-hooks              # make Codex / Claude Code start Livery-
 cd ~/code/my-project
 livery link ~/companies/my-first-company --repo-id my-project
 livery install-agent-hooks              # install linked-repo startup awareness here too
+# Also installs linked-repo Livery entrypoints:
+# Claude Code: /livery-hello, /livery-new-ticket, /livery-walkie-talkie
+# Codex: livery-hello, livery-new-ticket, livery-walkie-talkie skills
 
 # If this repo was already initialized as a standalone workspace, migrate it
 # into the shared workspace while linking it.
@@ -138,9 +141,11 @@ livery ticket close <ticket-id> --summary "Shipped v1 copy."
 livery ticket close <ticket-id> --status cancelled --summary "Folded into the new schema."
 ```
 
-`livery next`, `livery capabilities`, and `livery session-brief` are intentionally useful to both humans and CoS agents. Add `--format json` when Codex, Claude Code, or another tool needs structured output instead of prose. `livery install-agent-hooks` wires `session-brief` into Codex / Claude Code `SessionStart` hooks for the current workspace or linked repo.
+`livery next`, `livery capabilities`, and `livery session-brief` are intentionally useful to both humans and CoS agents. Add `--format json` when Codex, Claude Code, or another tool needs structured output instead of prose. `livery install-agent-hooks` wires `session-brief` into Codex / Claude Code `SessionStart` hooks for the current workspace or linked repo. In a linked repo, `livery link` and `livery install-agent-hooks` also install linked-repo-specific Livery entrypoints so the harness knows tickets and Walkie-Talkies belong in the parent workspace.
 
-If hooks are not installed or you want an explicit session handshake, use the shipped Livery hello entry point. Claude Code gets a grouped Livery slash command; Codex gets the `livery-hello` skill. It runs `livery session-brief`, acknowledges the active workspace or linked repo, then runs `livery status` for a quick board check.
+If hooks are not installed or you want an explicit session handshake, use the shipped Livery hello entry point. Claude Code gets a grouped Livery slash command in workspaces and `/livery-hello` in linked repos; Codex gets the `livery-hello` skill. It runs `livery session-brief`, acknowledges the active workspace or linked repo, then runs `livery status` for a quick board check.
+
+For a repo that was linked before Livery shipped linked-repo entrypoints, update Livery, `cd` into that project repo, and run `livery install-agent-hooks` again. Livery refreshes files it owns and skips user-written command/skill files unless you pass `--force`.
 
 ## Workspace layout
 
