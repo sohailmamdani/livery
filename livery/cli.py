@@ -2148,7 +2148,7 @@ def walkie_auto(
         if briefing.startswith("@"):
             brief_path = Path(briefing[1:]).expanduser()
             if not brief_path.is_absolute():
-                brief_path = root / brief_path
+                brief_path = Path.cwd() / brief_path
             if not brief_path.is_file():
                 typer.echo(f"Briefing file not found: {brief_path}", err=True)
                 raise typer.Exit(1)

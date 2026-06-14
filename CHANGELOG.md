@@ -4,6 +4,9 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Fixed
+- `livery walkie auto --briefing @file` now resolves relative briefing files from the current working directory, so linked repos can provide repo-local planning context while the walkie transcript is still created in the parent workspace.
+
 ## 0.15.0 — 2026-06-13
 
 ### Added

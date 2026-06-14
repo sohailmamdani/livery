@@ -148,6 +148,15 @@ Repo id:   api
 
 By default, `livery link` adds `.livery-link.toml` to `.git/info/exclude` when the project has a normal `.git/` directory. That keeps machine-local absolute paths out of commits. Use `--no-exclude` if you intentionally want to commit the link file.
 
+All workspace-level commands honor the link. For example, if you run
+`livery walkie new ...` or `livery walkie auto ...` from the project repo,
+the walkie transcript is created under the linked workspace's
+`walkie-talkie/` directory, not inside the project repo. Relative `@file`
+arguments, such as `--briefing @feature-plan.md`, are still read relative to
+the current working directory where you invoked the command, which lets a
+source repo supply planning context while the parent workspace owns the
+conversation record.
+
 If a project repo was already initialized with `livery init`, plain `livery link` refuses to write an ineffective link beside the existing `livery.toml`. Use the cleanup migration instead:
 
 ```sh

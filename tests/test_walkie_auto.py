@@ -12,6 +12,8 @@ from livery.dispatch import (
     prepare_walkie_turn,
 )
 from livery.cli import app
+from livery.paths import write_link
+from livery.walkie_controller import ControllerResult
 
 
 def _make_workspace_with_peers(tmp_path: Path) -> Path:
@@ -529,3 +531,73 @@ def test_walkie_auto_rejects_missing_ticket_before_creating_file(tmp_path, monke
     assert result.exit_code == 1
     assert "No ticket matching" in (result.stdout + result.stderr)
     assert not (root / "walkie-talkie" / "topic.md").exists()
+
+
+def test_walkie_new_from_linked_repo_creates_file_in_workspace(tmp_path, monkeypatch):
+    root = _make_workspace_with_peers(tmp_path)
+    repo = tmp_path / "feature-repo"
+    repo.mkdir()
+    write_link(repo_root=repo, workspace_root=root, repo_id="feature")
+    monkeypatch.chdir(repo)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "walkie",
+            "new",
+            "feature planning",
+            "--with",
+            "codex",
+            "--as",
+            "claude-code",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (root / "walkie-talkie" / "feature-planning.md").exists()
+    assert not (repo / "walkie-talkie").exists()
+    assert str(root / "walkie-talkie" / "feature-planning.md") in result.stdout
+
+
+def test_walkie_auto_briefing_file_is_relative_to_linked_repo_cwd(tmp_path, monkeypatch):
+    root = _make_workspace_with_peers(tmp_path)
+    repo = tmp_path / "feature-repo"
+    repo.mkdir()
+    write_link(repo_root=repo, workspace_root=root, repo_id="feature")
+    (repo / "feature-plan.md").write_text("Plan from the linked repo.\n")
+    monkeypatch.chdir(repo)
+
+    called: dict[str, object] = {}
+
+    def fake_run_controller(**kwargs):
+        called.update(kwargs)
+        return ControllerResult(
+            walkie_path=kwargs["walkie_path"],
+            locked=False,
+            stopped_reason="test stop",
+        )
+
+    with patch("livery.walkie_controller.run_controller", side_effect=fake_run_controller):
+        result = CliRunner().invoke(
+            app,
+            [
+                "walkie",
+                "auto",
+                "repo feature",
+                "--peer-a",
+                "proposer",
+                "--peer-b",
+                "critic",
+                "--briefing",
+                "@feature-plan.md",
+                "--max-turns",
+                "1",
+            ],
+        )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    walkie_path = root / "walkie-talkie" / "repo-feature.md"
+    assert called["walkie_path"] == walkie_path
+    assert walkie_path.exists()
+    assert "Plan from the linked repo." in walkie_path.read_text()
+    assert not (repo / "walkie-talkie").exists()
