@@ -4,6 +4,8 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.16.0 — 2026-06-13
+
 ### Added
 - Linked repos now get local Livery harness entrypoints when they are linked or when `livery install-agent-hooks` is run from inside them. Claude Code gets `/livery-hello`, `/livery-new-ticket`, and `/livery-walkie-talkie`; Codex gets matching skills. These linked-repo entrypoints orient the harness to the parent workspace before creating tickets or Walkie-Talkie transcripts. Existing linked repos can be updated by rerunning `livery install-agent-hooks` from inside the project repo.
 
