@@ -61,13 +61,34 @@ Steps:
 2. Gather missing fields conversationally:
    - **title** — one-line, imperative
    - **assignee** — agent id from the parent workspace, `cos`, or blank
+   - **repo** — Livery records the linked repo id/name automatically from
+     `.livery-link.toml`; pass `--repo <repo>` only to override it
    - **description** — one paragraph stating the goal
    - **context** (optional) — include repo-local details such as paths,
-     branch names, constraints, and the linked repo id
+     branch names and constraints
 3. Run `livery ticket new --title "..." --assignee <id|cos> --description "..." [--context "..."] --format json`.
    If assignee is blank, omit `--assignee`.
-4. Tell the user the ticket id and relative path from the JSON, and note that
-   it was created in the parent workspace, not inside this repo.
+4. Tell the user the ticket id, repo metadata, and relative path from the JSON,
+   and note that it was created in the parent workspace, not inside this repo.
+"""
+
+
+LINKED_REPO_LIST_AGENTS_SLASH = """---
+description: List parent-workspace Livery agents from this linked repo
+livery: managed
+---
+
+Help the user see which parent-workspace agents are available while working
+from this linked project repo.
+
+Steps:
+1. Run `livery where --format json` and confirm `resolution.kind` is
+   `linked-repo`.
+2. Run `livery agents --format json`.
+3. If there are no agents, say that plainly and mention `livery hire <agent-id>`
+   only if the user is trying to delegate work.
+4. Otherwise summarize the returned agent ids, names, runtimes, models, and
+   working directories. Make clear these agents belong to the parent workspace.
 """
 
 
@@ -141,13 +162,43 @@ Livery workspace.
 2. Gather missing fields conversationally:
    - **title** — one-line, imperative
    - **assignee** — agent id from the parent workspace, `cos`, or blank
+   - **repo** — Livery records the linked repo id/name automatically from
+     `.livery-link.toml`; pass `--repo <repo>` only to override it
    - **description** — one paragraph stating the goal
    - **context** (optional) — include repo-local details such as paths,
-     branch names, constraints, and the linked repo id
+     branch names and constraints
 3. Run `livery ticket new --title "..." --assignee <id|cos> --description "..." [--context "..."] --format json`.
    If assignee is blank, omit `--assignee`.
-4. Tell the user the ticket id and relative path from the JSON, and note that
-   it was created in the parent workspace, not inside this repo.
+4. Tell the user the ticket id, repo metadata, and relative path from the JSON,
+   and note that it was created in the parent workspace, not inside this repo.
+"""
+
+
+LINKED_REPO_LIST_AGENTS_SKILL = """---
+name: livery-list-agents
+description: List parent-workspace Livery agents from a linked project repo. Use when the user invokes /livery-list-agents, asks what agents exist, asks who can take work, needs valid assignee ids, or wants available runtimes/cwds before creating tickets, dispatching, or starting Walkie-Talkies.
+livery: managed
+---
+
+# List Livery agents from a linked repo
+
+This repo is only the work surface. The hired-agent inventory belongs to the
+parent workspace.
+
+## Steps
+
+1. Run `livery where --format json` and confirm `resolution.kind` is
+   `linked-repo`.
+2. Run `livery agents --format json`.
+3. If the response contains no agents, say that plainly. Suggest
+   `livery hire <agent-id>` only when the user is trying to delegate work.
+4. Otherwise summarize the agent ids, names, runtimes, models, and working
+   directories from the JSON.
+5. Use agent ids exactly as returned by the command when creating tickets,
+   dispatching work, or starting Walkie-Talkies.
+
+Do not hand-scan `agents/` in this repo; linked repos resolve to the parent
+workspace through Livery's CLI.
 """
 
 
@@ -250,6 +301,7 @@ def install_linked_repo_assets(
     if "claude_code" in selected:
         for name, content in (
             ("livery-hello.md", LINKED_REPO_HELLO_SLASH),
+            ("livery-list-agents.md", LINKED_REPO_LIST_AGENTS_SLASH),
             ("livery-new-ticket.md", LINKED_REPO_NEW_TICKET_SLASH),
             ("livery-walkie-talkie.md", LINKED_REPO_WALKIE_SLASH),
         ):
@@ -263,6 +315,7 @@ def install_linked_repo_assets(
             )
         for name, content in (
             ("livery-hello", LINKED_REPO_HELLO_SKILL),
+            ("livery-list-agents", LINKED_REPO_LIST_AGENTS_SKILL),
             ("livery-new-ticket", LINKED_REPO_NEW_TICKET_SKILL),
             ("livery-walkie-talkie", LINKED_REPO_WALKIE_SKILL),
         ):
@@ -278,6 +331,7 @@ def install_linked_repo_assets(
     if "codex" in selected:
         for name, content in (
             ("livery-hello", LINKED_REPO_HELLO_SKILL),
+            ("livery-list-agents", LINKED_REPO_LIST_AGENTS_SKILL),
             ("livery-new-ticket", LINKED_REPO_NEW_TICKET_SKILL),
             ("livery-walkie-talkie", LINKED_REPO_WALKIE_SKILL),
         ):

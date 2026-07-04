@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 from livery.cli import app
 from livery.hire import hire_agent
 from livery.init import init_workspace
+from livery.paths import write_link
 
 
 def _workspace(tmp_path: Path) -> Path:
@@ -57,6 +58,197 @@ def test_ticket_commands_emit_json_records(tmp_path, monkeypatch):
     shown_payload = json.loads(shown.stdout)
     assert shown_payload["ticket"]["id"] == ticket["id"]
     assert shown_payload["ticket"]["metadata"]["title"] == "Define harness API"
+
+
+def test_ticket_new_records_explicit_repo_and_list_filters(tmp_path, monkeypatch):
+    workspace = _workspace(tmp_path)
+    monkeypatch.chdir(workspace)
+    runner = CliRunner()
+
+    created = runner.invoke(
+        app,
+        [
+            "ticket",
+            "new",
+            "--title",
+            "Patch API client",
+            "--assignee",
+            "cos",
+            "--repo",
+            "api",
+            "--description",
+            "Fix the generated client in the API repo.",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert created.exit_code == 0, created.stdout + created.stderr
+    ticket = json.loads(created.stdout)["ticket"]
+    assert ticket["repo"] == "api"
+    assert ticket["metadata"]["repo"] == "api"
+
+    listed = runner.invoke(app, ["ticket", "list", "--repo", "api", "--format", "json"])
+    assert listed.exit_code == 0, listed.stdout + listed.stderr
+    assert [item["id"] for item in json.loads(listed.stdout)["tickets"]] == [ticket["id"]]
+
+    other = runner.invoke(app, ["ticket", "list", "--repo", "web", "--format", "json"])
+    assert other.exit_code == 0, other.stdout + other.stderr
+    assert json.loads(other.stdout)["tickets"] == []
+
+
+def test_ticket_new_from_linked_repo_records_repo_metadata(tmp_path, monkeypatch):
+    workspace = _workspace(tmp_path)
+    repo = tmp_path / "acme-api"
+    repo.mkdir()
+    write_link(repo_root=repo, workspace_root=workspace, repo_id="api")
+    monkeypatch.chdir(repo)
+    runner = CliRunner()
+
+    created = runner.invoke(
+        app,
+        [
+            "ticket",
+            "new",
+            "--title",
+            "Fix linked repo bug",
+            "--assignee",
+            "cos",
+            "--description",
+            "Track the bug from the linked repo.",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert created.exit_code == 0, created.stdout + created.stderr
+    ticket = json.loads(created.stdout)["ticket"]
+    assert ticket["repo"] == "api"
+    assert ticket["metadata"]["repo"] == "api"
+    assert ticket["path"].startswith(str(workspace / "tickets"))
+    assert not (repo / "tickets").exists()
+
+    listed = runner.invoke(app, ["ticket", "list", "--repo", "api", "--format", "json"])
+    assert listed.exit_code == 0, listed.stdout + listed.stderr
+    assert [item["id"] for item in json.loads(listed.stdout)["tickets"]] == [ticket["id"]]
+
+
+def test_ticket_new_from_linked_repo_without_repo_id_uses_directory_name(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = _workspace(tmp_path)
+    repo = tmp_path / "acme-web"
+    repo.mkdir()
+    write_link(repo_root=repo, workspace_root=workspace)
+    monkeypatch.chdir(repo)
+    runner = CliRunner()
+
+    created = runner.invoke(
+        app,
+        [
+            "ticket",
+            "new",
+            "--title",
+            "Fix linked web bug",
+            "--assignee",
+            "cos",
+            "--description",
+            "Track the bug from a linked repo without repo_id.",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert created.exit_code == 0, created.stdout + created.stderr
+    ticket = json.loads(created.stdout)["ticket"]
+    assert ticket["repo"] == "acme-web"
+    assert ticket["metadata"]["repo"] == "acme-web"
+
+
+def test_agents_command_lists_hired_agents(tmp_path, monkeypatch):
+    workspace = _workspace(tmp_path)
+    agent_cwd = tmp_path / "content"
+    agent_cwd.mkdir()
+    hire_agent(
+        root=workspace,
+        agent_id="writer",
+        name="Senior Writer",
+        runtime="claude_code",
+        model="claude-sonnet-4-6",
+        cwd=str(agent_cwd),
+        reports_to="cos",
+        role="Writes product narratives.",
+        hired="2026-06-13",
+    )
+    hire_agent(
+        root=workspace,
+        agent_id="research",
+        name="Research Lead",
+        runtime="codex",
+        model="gpt-5-codex",
+        cwd=str(agent_cwd),
+        reports_to="cos",
+        role="Finds and verifies facts.",
+        hired="2026-06-14",
+    )
+    monkeypatch.chdir(workspace)
+    runner = CliRunner()
+
+    listed = runner.invoke(app, ["agents", "--format", "json"])
+
+    assert listed.exit_code == 0, listed.stdout + listed.stderr
+    payload = json.loads(listed.stdout)
+    assert payload["schema_version"] == 1
+    assert payload["workspace_root"] == str(workspace)
+    assert [agent["id"] for agent in payload["agents"]] == ["research", "writer"]
+    writer = next(agent for agent in payload["agents"] if agent["id"] == "writer")
+    assert writer["name"] == "Senior Writer"
+    assert writer["runtime"] == "claude_code"
+    assert writer["model"] == "claude-sonnet-4-6"
+    assert writer["cwd"] == str(agent_cwd)
+    assert writer["role"] == "Writes product narratives."
+    assert writer["relative_path"] == "agents/writer/agent.md"
+    assert writer["prompt_relative_path"] == "agents/writer/AGENTS.md"
+
+    text = runner.invoke(app, ["agents"])
+    assert text.exit_code == 0, text.stdout + text.stderr
+    assert "writer" in text.stdout
+    assert "claude_code" in text.stdout
+    assert str(agent_cwd) in text.stdout
+
+
+def test_agents_command_from_linked_repo_lists_parent_workspace_agents(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = _workspace(tmp_path)
+    agent_cwd = tmp_path / "api"
+    agent_cwd.mkdir()
+    hire_agent(
+        root=workspace,
+        agent_id="api-dev",
+        name="API Developer",
+        runtime="codex",
+        model="gpt-5-codex",
+        cwd=str(agent_cwd),
+        reports_to="cos",
+        role="Builds API features.",
+        hired="2026-06-13",
+    )
+    repo = tmp_path / "linked-api"
+    repo.mkdir()
+    write_link(repo_root=repo, workspace_root=workspace, repo_id="api")
+    monkeypatch.chdir(repo)
+
+    listed = CliRunner().invoke(app, ["agents", "--format", "json"])
+
+    assert listed.exit_code == 0, listed.stdout + listed.stderr
+    payload = json.loads(listed.stdout)
+    assert payload["workspace_root"] == str(workspace)
+    assert [agent["id"] for agent in payload["agents"]] == ["api-dev"]
+    assert payload["agents"][0]["path"].startswith(str(workspace / "agents"))
+    assert not (repo / "agents").exists()
 
 
 def test_memory_commands_emit_json_records(tmp_path, monkeypatch):

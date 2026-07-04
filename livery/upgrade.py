@@ -54,8 +54,11 @@ from .init import (
     HELLO_SLASH,
     LIVERY_COMMAND_GROUP,
     LIVERY_HELLO_SKILL_NAME,
+    LIVERY_LIST_AGENTS_SKILL_NAME,
     LIVERY_NEW_TICKET_SKILL_NAME,
     LIVERY_WALKIE_SKILL_NAME,
+    LIST_AGENTS_SKILL,
+    LIST_AGENTS_SLASH,
     NEW_TICKET_SKILL,
     TICKET_SLASH,
     WALKIE_SKILL,
@@ -316,6 +319,10 @@ def compute_plan(root: Path) -> UpgradePlan:
                 HELLO_SLASH,
             ))
             items.append(_plan_skill_file(
+                command_group / "agents.md",
+                LIST_AGENTS_SLASH,
+            ))
+            items.append(_plan_skill_file(
                 command_group / "ticket.md",
                 TICKET_SLASH,
             ))
@@ -327,6 +334,10 @@ def compute_plan(root: Path) -> UpgradePlan:
             items.append(_plan_skill_file(
                 root / engine.skills_dir / LIVERY_HELLO_SKILL_NAME / "SKILL.md",
                 HELLO_SKILL,
+            ))
+            items.append(_plan_skill_file(
+                root / engine.skills_dir / LIVERY_LIST_AGENTS_SKILL_NAME / "SKILL.md",
+                LIST_AGENTS_SKILL,
             ))
             items.append(_plan_skill_file(
                 root / engine.skills_dir / LIVERY_NEW_TICKET_SKILL_NAME / "SKILL.md",

@@ -53,6 +53,7 @@ class TicketSummary:
     id: str
     title: str
     assignee: str
+    repo: str | None
     status: str
     created: datetime | None
     updated: datetime | None
@@ -115,6 +116,7 @@ def _load_tickets(root: Path) -> list[TicketSummary]:
             id=str(post.get("id") or path.stem),
             title=str(post.get("title") or ""),
             assignee=str(post.get("assignee") or "-"),
+            repo=(str(post.get("repo")) if post.get("repo") else None),
             status=str(post.get("status") or "open"),
             created=_parse_iso(post.get("created")),
             updated=_parse_iso(post.get("updated")),

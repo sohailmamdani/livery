@@ -72,13 +72,16 @@ def test_init_workspace_creates_standard_layout(tmp_path):
     assert Path("memory/preferences/.gitkeep") in paths
     # Claude Code assets
     assert Path(".claude/commands/livery/hello.md") in paths
+    assert Path(".claude/commands/livery/agents.md") in paths
     assert Path(".claude/commands/livery/ticket.md") in paths
     assert Path(".claude/commands/livery/walkie.md") in paths
     assert Path(".claude/skills/livery-hello/SKILL.md") in paths
+    assert Path(".claude/skills/livery-list-agents/SKILL.md") in paths
     assert Path(".claude/skills/livery-new-ticket/SKILL.md") in paths
     assert Path(".claude/skills/livery-walkie-talkie/SKILL.md") in paths
     # Codex assets
     assert Path(".agents/skills/livery-hello/SKILL.md") in paths
+    assert Path(".agents/skills/livery-list-agents/SKILL.md") in paths
     assert Path(".agents/skills/livery-new-ticket/SKILL.md") in paths
     assert Path(".agents/skills/livery-walkie-talkie/SKILL.md") in paths
 
@@ -124,8 +127,10 @@ def test_init_workspace_cos_engine_claude_code_only(tmp_path):
     assert not (target / "AGENTS.md").exists()
     # Claude Code skill scaffolding present
     assert (target / ".claude" / "skills" / "livery-hello" / "SKILL.md").exists()
+    assert (target / ".claude" / "skills" / "livery-list-agents" / "SKILL.md").exists()
     assert (target / ".claude" / "skills" / "livery-new-ticket" / "SKILL.md").exists()
     assert (target / ".claude" / "commands" / "livery" / "hello.md").exists()
+    assert (target / ".claude" / "commands" / "livery" / "agents.md").exists()
     assert (target / ".claude" / "commands" / "livery" / "ticket.md").exists()
     # Walkie-talkie skill + slash command present
     assert (target / ".claude" / "skills" / "livery-walkie-talkie" / "SKILL.md").exists()
@@ -141,6 +146,7 @@ def test_init_workspace_cos_engine_codex_only(tmp_path):
     assert not (target / "CLAUDE.md").exists()
     # Codex skill scaffolding present at the .agents/ path
     assert (target / ".agents" / "skills" / "livery-hello" / "SKILL.md").exists()
+    assert (target / ".agents" / "skills" / "livery-list-agents" / "SKILL.md").exists()
     assert (target / ".agents" / "skills" / "livery-new-ticket" / "SKILL.md").exists()
     # Walkie-talkie skill installed for Codex too — initiating from
     # either harness must work
@@ -186,6 +192,7 @@ def test_init_workspace_multiple_engines_dedupe_filenames(tmp_path):
     assert sum(1 for p in paths if str(p) == "AGENTS.md") == 1
     # Codex still gets its skill dir; pi/opencode don't add anything
     assert Path(".agents/skills/livery-hello/SKILL.md") in paths
+    assert Path(".agents/skills/livery-list-agents/SKILL.md") in paths
     assert Path(".agents/skills/livery-new-ticket/SKILL.md") in paths
     assert Path(".agents/skills/livery-walkie-talkie/SKILL.md") in paths
     # CLAUDE.md not requested

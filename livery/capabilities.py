@@ -72,6 +72,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         commands=(
             "livery ticket new --title \"...\" --assignee <id|cos>",
             "livery ticket list",
+            "livery ticket list --repo <repo>",
             "livery ticket list --format json",
             "livery status",
             "livery status --format json",
@@ -101,6 +102,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         title="Hire agents and dispatch tickets",
         summary="Create specialized agents, then send ticket work to their configured runtime and cwd.",
         commands=(
+            "livery agents",
+            "livery agents --format json",
             "livery hire <agent-id>",
             "livery doctor",
             "livery dispatch prep <ticket-id> --worktree",
@@ -384,6 +387,7 @@ def _status_summary(report: StatusReport) -> dict[str, object]:
                 "id": ticket.id,
                 "title": ticket.title,
                 "assignee": ticket.assignee,
+                "repo": ticket.repo,
                 "age_days": ticket.age_days,
             }
             for ticket in report.stale_tickets[:5]
@@ -394,6 +398,7 @@ def _status_summary(report: StatusReport) -> dict[str, object]:
                 "id": ticket.id,
                 "title": ticket.title,
                 "assignee": ticket.assignee,
+                "repo": ticket.repo,
                 "blocked_on": ticket.blocked_on,
                 "age_days": ticket.age_days,
             }
@@ -403,6 +408,7 @@ def _status_summary(report: StatusReport) -> dict[str, object]:
             {
                 "id": ticket.id,
                 "title": ticket.title,
+                "repo": ticket.repo,
                 "status": ticket.status,
             }
             for ticket in report.recently_closed

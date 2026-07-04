@@ -48,8 +48,13 @@ def test_install_agent_hooks_targets_linked_repo_not_parent_workspace(tmp_path, 
     assert result.exit_code == 0, result.stdout + result.stderr
     assert (repo / ".codex" / "hooks.json").exists()
     assert (repo / ".claude" / "settings.local.json").exists()
+    list_skill = repo / ".agents" / "skills" / "livery-list-agents" / "SKILL.md"
+    list_command = repo / ".claude" / "commands" / "livery-list-agents.md"
     codex_skill = repo / ".agents" / "skills" / "livery-new-ticket" / "SKILL.md"
     claude_command = repo / ".claude" / "commands" / "livery-walkie-talkie.md"
+    assert "livery agents --format json" in list_skill.read_text()
+    assert "parent workspace" in list_skill.read_text()
+    assert "livery agents --format json" in list_command.read_text()
     assert "linked project repo" in codex_skill.read_text()
     assert "parent workspace" in codex_skill.read_text()
     assert "livery walkie new" in claude_command.read_text()

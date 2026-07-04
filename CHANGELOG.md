@@ -4,6 +4,12 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.17.0 — 2026-07-03
+
+### Added
+- `livery agents` now lists hired agents, with `--format json` for harness integrations. Fresh and upgraded workspaces also get a managed `livery-list-agents` skill that invokes the JSON command from Claude Code/Codex harnesses, including linked-repo overlays.
+- Tickets can now carry optional `repo` metadata. `livery ticket new --repo <repo>` records it explicitly, tickets created from linked repos fill it automatically from `.livery-link.toml`, and `livery ticket list --repo <repo>` filters by it.
+
 ## 0.16.0 — 2026-06-13
 
 ### Added

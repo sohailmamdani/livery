@@ -133,7 +133,7 @@ workspace_id = "acme"
 ### Fields
 
 - **`workspace`** — required path to a directory containing `livery.toml`. Absolute paths are simplest. Relative paths are resolved from the directory containing `.livery-link.toml`.
-- **`repo_id`** — optional short name for the project repo, useful in CLI output and future ticket metadata.
+- **`repo_id`** — optional short name for the project repo. When you create a ticket from this linked repo, Livery records it as the ticket's `repo` metadata. If omitted, Livery falls back to the repo directory name.
 - **`workspace_id`** — optional stable name for the workspace, useful when absolute paths differ across machines.
 
 After linking, `livery where` shows how the current directory resolves:
@@ -181,7 +181,7 @@ For Claude Code, Livery writes:
 
 The startup brief tells the CoS whether the current directory is a workspace, linked repo, or legacy framework repo; includes concise workspace status; and instructs the CoS to acknowledge that Livery context to the user.
 
-When run from a linked repo, `livery install-agent-hooks` also installs a small linked-repo harness overlay beside the project code. Claude Code gets `/livery-hello`, `/livery-new-ticket`, and `/livery-walkie-talkie`; Codex gets matching `livery-hello`, `livery-new-ticket`, and `livery-walkie-talkie` skills. These are materially different from the parent-workspace entrypoints: they first confirm the repo link, then tell the harness that Livery tickets and Walkie-Talkie transcripts are created in the parent workspace while repo-local paths and branch context still matter.
+When run from a linked repo, `livery install-agent-hooks` also installs a small linked-repo harness overlay beside the project code. Claude Code gets `/livery-hello`, `/livery-list-agents`, `/livery-new-ticket`, and `/livery-walkie-talkie`; Codex gets matching `livery-hello`, `livery-list-agents`, `livery-new-ticket`, and `livery-walkie-talkie` skills. These are materially different from the parent-workspace entrypoints: they first confirm the repo link, then tell the harness that Livery agents, tickets, and Walkie-Talkie transcripts are resolved through the parent workspace while repo-local paths and branch context still matter.
 
 To update a repo that was linked before this overlay existed, update Livery, `cd` into the linked repo, and run `livery install-agent-hooks` again. Livery updates managed linked-repo entrypoints and reports any user-written files it skipped.
 
@@ -202,6 +202,7 @@ Each ticket is a markdown file with frontmatter and three body sections (`## Des
 id: 2026-04-29-001-livery-dispatch-prep-worktree-should-symlink-env  # required, matches filename stem
 title: "livery dispatch prep --worktree should symlink .env into the worktree"  # required
 assignee: cos                                # agent id, "cos", or null
+repo: api                                    # optional linked repo id/name
 status: open                                 # open | done | blocked
 created: 2026-04-29T10:30:00Z                # ISO timestamp
 updated: 2026-04-29T10:30:00Z                # ISO timestamp
@@ -223,6 +224,8 @@ blocked_on: "waiting on Airtable schema PR"  # optional — see below
   If you need a custom terminal status, add it to `TERMINAL_STATUSES` in `livery/status.py` and document the addition here. Silent fall-through to "open" was the prior behavior and turned out to mask cancelled tickets, so we made the set explicit.
 
 - **`blocked_on`** (optional) — a free-form string describing what the ticket is waiting on. An alternative to `status: blocked` for cases where the ticket is technically still open but parked. `livery status` treats either signal as "blocked" and renders accordingly. Use whichever fits your style.
+
+- **`repo`** (optional) — the linked repo id/name the ticket is about. `livery ticket new --repo <repo>` sets it explicitly, and tickets created while your cwd is a linked repo fill it automatically from `.livery-link.toml` (`repo_id` first, then the repo directory name). Use `livery ticket list --repo <repo>` to find those tickets later.
 
 ### Staleness
 
@@ -306,6 +309,7 @@ When `cos_engine` includes Codex, Livery scaffolds skills at `.agents/skills/<na
 Shipped skills today:
 
 - **`livery-hello`** — entry handshake for a new session. Runs `livery session-brief`, acknowledges the workspace or linked repo, then runs `livery status`.
+- **`livery-list-agents`** — lists hired agents by running `livery agents --format json`.
 - **`livery-new-ticket`** — helps turn user intent into a markdown ticket.
 - **`livery-walkie-talkie`** — starts or continues append-only AI-to-AI debate.
 

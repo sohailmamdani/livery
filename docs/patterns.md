@@ -74,7 +74,7 @@ livery link ~/companies/indies-and-micros --repo-id branddb
 livery where
 ```
 
-After that, running `livery status`, `livery ticket new`, or other workspace commands from inside `~/code/branddb` uses the linked workspace. The repo does not become a workspace; it just knows where its CoS HQ lives.
+After that, running `livery status`, `livery ticket new`, or other workspace commands from inside `~/code/branddb` uses the linked workspace. The repo does not become a workspace; it just knows where its CoS HQ lives. Tickets created from the linked repo automatically get `repo: branddb` metadata, so `livery ticket list --repo branddb` can find them later.
 
 By default `livery link` adds `.livery-link.toml` to `.git/info/exclude` when the repo has a normal `.git/` directory. That keeps the absolute local path out of commits. If your team wants a committed link file, use `--no-exclude` and agree on paths that make sense for every machine.
 

@@ -87,6 +87,7 @@ SUPPORTED_COS_ENGINES: tuple[str, ...] = tuple(list(COS_ENGINES.keys()) + ["both
 # improved defaults; user content above or below the markers is preserved.
 LIVERY_COMMAND_GROUP = "livery"
 LIVERY_HELLO_SKILL_NAME = "livery-hello"
+LIVERY_LIST_AGENTS_SKILL_NAME = "livery-list-agents"
 LIVERY_NEW_TICKET_SKILL_NAME = "livery-new-ticket"
 LIVERY_WALKIE_SKILL_NAME = "livery-walkie-talkie"
 
@@ -155,10 +156,12 @@ you, not the intern-compliance version.
   shipped Livery hello command/skill. It runs `livery session-brief` and a quick
   `livery status` check so the session starts grounded in live workspace
   state.
+- When you need valid hired-agent ids, runtimes, models, or working directories,
+  run `livery agents --format json` instead of hand-scanning `agents/`.
 - When acting programmatically or advising another agent, prefer structured
   output: `livery next --format json`, `livery capabilities --format json`,
-  and `--format json` on ticket, memory, dispatch, where, and status
-  commands. Parse JSON instead of scraping human-readable text.
+  and `--format json` on agents, ticket, memory, dispatch, where, and
+  status commands. Parse JSON instead of scraping human-readable text.
 - If Livery-managed SessionStart hooks are installed, read the injected
   `livery session-brief` carefully. It tells you whether the current directory
   is a workspace or linked repo, includes a concise status summary, and asks
@@ -210,9 +213,10 @@ Steps:
 1. Gather any missing details conversationally:
    - **title** — one-line, imperative ("Add login timeout", not "Login bug")
    - **assignee** — agent id from `agents/<id>/`, `cos` for the CoS session, or leave blank
+   - **repo** (optional) — linked repo id/name when the ticket is about a project repo
    - **description** — one paragraph stating the goal
    - **context** (optional) — links, constraints, prior decisions
-2. Run `livery ticket new --title "..." --assignee <id|cos> --description "..." [--context "..."] --format json`.
+2. Run `livery ticket new --title "..." --assignee <id|cos> [--repo <repo>] --description "..." [--context "..."] --format json`.
    If assignee is blank, omit `--assignee`.
 3. Show the user the created ticket id and relative path from the JSON.
 """
@@ -237,6 +241,22 @@ Steps:
    action.
 """
 
+LIST_AGENTS_SLASH = """---
+description: List hired Livery agents
+livery: managed
+---
+
+Help the user see which agents are available in the active Livery workspace.
+
+Steps:
+1. Run `livery agents --format json`.
+2. If there are no agents, say that plainly and mention `livery hire <agent-id>`
+   only if the user is trying to delegate work.
+3. Otherwise summarize the returned agent ids, names, runtimes, models, and
+   working directories. Use the ids exactly as returned when creating tickets,
+   dispatching, or starting Walkie-Talkies.
+"""
+
 NEW_TICKET_SKILL = """---
 name: livery-new-ticket
 description: Create a new Livery ticket to track work or delegate to an agent. Use when the user says "create a ticket", "new ticket", "file a ticket", invokes the Livery ticket command, or describes a unit of work that should be formalized.
@@ -256,13 +276,14 @@ Livery tracks work as markdown tickets in `tickets/<YYYY-MM-DD>-<NNN>-<slug>.md`
 
 - **title** — one-line, imperative
 - **assignee** — agent id, `cos` for the CoS session, or blank
+- **repo** (optional) — linked repo id/name when the ticket is about a project repo
 - **description** — one paragraph stating the goal
 - **context** (optional) — links, constraints, prior decisions
 
 ## Steps
 
 1. Gather missing fields conversationally.
-2. Run `livery ticket new --title "..." --assignee <id|cos> --description "..." [--context "..."] --format json`.
+2. Run `livery ticket new --title "..." --assignee <id|cos> [--repo <repo>] --description "..." [--context "..."] --format json`.
    If assignee is blank, omit `--assignee`.
 3. Show the created ticket id and relative path from the JSON.
 """
@@ -297,6 +318,31 @@ Use this skill to ground the current session in live Livery state.
    - the most useful next action
 
 Keep the response short. This is an entry handshake, not a full report.
+"""
+
+
+LIST_AGENTS_SKILL = """---
+name: livery-list-agents
+description: List hired Livery agents in the active workspace or linked repo. Use when the user asks what agents exist, says "list agents", asks who can take work, needs valid assignee ids, or wants available runtimes/cwds before creating tickets, dispatching, or starting Walkie-Talkies.
+livery: managed
+---
+
+# List Livery agents
+
+Use this skill to get the current hired-agent inventory from Livery's CLI.
+
+## Steps
+
+1. Run `livery agents --format json`.
+2. If the response contains no agents, say that plainly. Suggest
+   `livery hire <agent-id>` only when the user is trying to delegate work.
+3. Otherwise summarize the agent ids, names, runtimes, models, and working
+   directories from the JSON.
+4. Use agent ids exactly as returned by the command when creating tickets,
+   dispatching work, or starting Walkie-Talkies.
+
+Do not hand-scan `agents/` unless the command fails; the command resolves
+linked repos and normalizes the agent metadata.
 """
 
 
@@ -694,10 +740,12 @@ def init_workspace(
         if engine.commands_dir:
             command_group = target / engine.commands_dir / LIVERY_COMMAND_GROUP
             _install_skill_file(command_group / "hello.md", HELLO_SLASH)
+            _install_skill_file(command_group / "agents.md", LIST_AGENTS_SLASH)
             _install_skill_file(command_group / "ticket.md", TICKET_SLASH)
             _install_skill_file(command_group / "walkie.md", WALKIE_SLASH)
         if engine.skills_dir:
             _install_skill_file(target / engine.skills_dir / LIVERY_HELLO_SKILL_NAME / "SKILL.md", HELLO_SKILL)
+            _install_skill_file(target / engine.skills_dir / LIVERY_LIST_AGENTS_SKILL_NAME / "SKILL.md", LIST_AGENTS_SKILL)
             _install_skill_file(target / engine.skills_dir / LIVERY_NEW_TICKET_SKILL_NAME / "SKILL.md", NEW_TICKET_SKILL)
             _install_skill_file(target / engine.skills_dir / LIVERY_WALKIE_SKILL_NAME / "SKILL.md", WALKIE_SKILL)
 

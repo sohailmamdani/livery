@@ -106,6 +106,7 @@ livery init                             # scaffolds CLAUDE.md + AGENTS.md by def
 # livery init --cos-engine claude_code,codex,pi   # multiple engines, comma-separated
 livery doctor                           # see which runtimes are reachable
 livery hire writer                      # hire your first agent (interactive wizard)
+livery agents                           # list hired agents and their runtimes/cwds
 livery install-agent-hooks              # make Codex / Claude Code start Livery-aware
 # Manual session entry: the Livery hello command/skill in your harness.
 
@@ -114,18 +115,20 @@ cd ~/code/my-project
 livery link ~/companies/my-first-company --repo-id my-project
 livery install-agent-hooks              # install linked-repo startup awareness here too
 # Also installs linked-repo Livery entrypoints:
-# Claude Code: /livery-hello, /livery-new-ticket, /livery-walkie-talkie
-# Codex: livery-hello, livery-new-ticket, livery-walkie-talkie skills
+# Claude Code: /livery-hello, /livery-list-agents, /livery-new-ticket, /livery-walkie-talkie
+# Codex: livery-hello, livery-list-agents, livery-new-ticket, livery-walkie-talkie skills
 
 # If this repo was already initialized as a standalone workspace, migrate it
 # into the shared workspace while linking it.
 livery link ~/companies/my-first-company --repo-id my-project --move-existing-workspace
 
 # File a ticket, either for your CoS session ("cos") or a hired agent.
+# From a linked repo, Livery records repo metadata automatically.
 livery ticket new --title "Draft the homepage copy" --assignee cos
 
 # See what's on the board
 livery ticket list
+livery ticket list --repo my-project
 
 # Record durable workspace knowledge
 livery memory add --type lesson --title "Review dispatch output before closing" --body "..."
@@ -167,15 +170,18 @@ my-workspace/
 ├── .claude/                                   # Claude Code's skill discovery dir
 │   ├── commands/livery/                       # grouped Livery slash commands
 │   │   ├── hello.md                           # Livery orientation command
+│   │   ├── agents.md                          # Livery agent inventory command
 │   │   ├── ticket.md                          # Livery ticket command
 │   │   └── walkie.md                          # Livery walkie command
 │   └── skills/
 │       ├── livery-hello/SKILL.md
+│       ├── livery-list-agents/SKILL.md
 │       ├── livery-new-ticket/SKILL.md
 │       └── livery-walkie-talkie/SKILL.md
 └── .agents/                                   # Codex's skill discovery dir (.agents/skills)
     └── skills/
         ├── livery-hello/SKILL.md
+        ├── livery-list-agents/SKILL.md
         ├── livery-new-ticket/SKILL.md
         └── livery-walkie-talkie/SKILL.md
 ```
@@ -229,6 +235,13 @@ hired: 2026-04-20
 ```
 
 `model` is passed through to the runtime when present. `effort` is optional; today Livery passes it to Codex as `model_reasoning_effort` and to Claude Code as `--effort`.
+
+List hired agents and their configured runtimes/cwds:
+
+```sh
+livery agents
+livery agents --format json
+```
 
 ## Dispatch
 
@@ -310,7 +323,7 @@ Get an at-a-glance dashboard of the workspace — open tickets grouped by assign
 livery status
 ```
 
-`livery status` is the human-readable rollup; `livery ticket list` is the raw scriptable cut.
+`livery status` is the human-readable rollup; `livery ticket list` is the raw scriptable cut. In multi-repo workspaces, `livery ticket list --repo <repo-id>` filters to tickets tagged with a linked repo.
 
 A ticket counts as **blocked** if its frontmatter has either `status: blocked` or `blocked_on: "<reason>"`. **Stale** is open ≥ 7 days by default (configurable with `--stale-days`).
 

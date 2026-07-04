@@ -40,6 +40,7 @@ def _write_ticket(
     days_old: int,
     days_since_update: int | None = None,
     blocked_on: str | None = None,
+    repo: str | None = None,
 ) -> None:
     created = (_now() - timedelta(days=days_old)).strftime("%Y-%m-%dT%H:%M:%SZ")
     update_age = days_since_update if days_since_update is not None else 0
@@ -54,6 +55,8 @@ def _write_ticket(
     }
     if blocked_on:
         metadata["blocked_on"] = blocked_on
+    if repo:
+        metadata["repo"] = repo
     post = frontmatter.Post("body", **metadata)
     (root / "tickets" / f"{ticket_id}.md").write_text(frontmatter.dumps(post) + "\n")
 
@@ -100,6 +103,22 @@ def test_stale_tickets_threshold(tmp_path):
     ids = [t.id for t in report.stale_tickets]
     # Stale tickets sorted oldest-first
     assert ids == ["staler", "stale"]
+
+
+def test_ticket_summary_preserves_repo_metadata(tmp_path):
+    root = _make_workspace(tmp_path)
+    _write_ticket(
+        root,
+        ticket_id="stale-api",
+        title="stale",
+        assignee="x",
+        status="open",
+        days_old=10,
+        repo="api",
+    )
+
+    report = compute_status(root, stale_days=7)
+    assert report.stale_tickets[0].repo == "api"
 
 
 def test_stale_threshold_configurable(tmp_path):

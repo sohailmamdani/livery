@@ -32,8 +32,11 @@ Human-readable text remains the default. Harnesses and scripts should prefer
 ```sh
 livery where --format json
 livery status --format json
+livery agents --format json
 livery ticket new --title "..." --assignee cos --description "..." --format json
+livery ticket new --title "..." --assignee cos --repo api --description "..." --format json
 livery ticket list --format json
+livery ticket list --repo api --format json
 livery ticket show <ticket-id> --format json
 livery ticket close <ticket-id> --summary "..." --no-push --format json
 livery memory add --type lesson --title "..." --body "..." --format json

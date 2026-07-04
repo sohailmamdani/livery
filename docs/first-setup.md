@@ -140,20 +140,23 @@ my-first-company/
 ├── .claude/                         # Claude Code skill discovery
 │   ├── commands/livery/             # grouped Livery slash commands
 │   │   ├── hello.md                 # Livery orientation command
+│   │   ├── agents.md                # Livery agent inventory command
 │   │   ├── ticket.md                # Livery ticket command
 │   │   └── walkie.md                # Livery walkie command
 │   └── skills/
 │       ├── livery-hello/SKILL.md
+│       ├── livery-list-agents/SKILL.md
 │       ├── livery-new-ticket/SKILL.md
 │       └── livery-walkie-talkie/SKILL.md
 └── .agents/                         # Codex skill discovery (.agents/skills)
     └── skills/
         ├── livery-hello/SKILL.md
+        ├── livery-list-agents/SKILL.md
         ├── livery-new-ticket/SKILL.md
         └── livery-walkie-talkie/SKILL.md
 ```
 
-`CLAUDE.md` and `AGENTS.md` have identical content — they're named for the two engines that auto-load them. The shipped `livery-hello`, `livery-new-ticket`, and `livery-walkie-talkie` skills are scaffolded under `.claude/` for Claude Code and `.agents/` for Codex. Claude Code slash commands are grouped under `.claude/commands/livery/` so they do not occupy generic harness command names. Delete whichever pair you don't use, or keep both if you move between engines.
+`CLAUDE.md` and `AGENTS.md` have identical content — they're named for the two engines that auto-load them. The shipped `livery-hello`, `livery-list-agents`, `livery-new-ticket`, and `livery-walkie-talkie` skills are scaffolded under `.claude/` for Claude Code and `.agents/` for Codex. Claude Code slash commands are grouped under `.claude/commands/livery/` so they do not occupy generic harness command names. Delete whichever pair you don't use, or keep both if you move between engines.
 
 If you used `--cos-engine claude_code`, only `CLAUDE.md` and `.claude/` get scaffolded. If you used `--cos-engine codex`, only `AGENTS.md` and `.agents/` get scaffolded — no stray Claude-specific files in your workspace. Pi and OpenCode use `AGENTS.md` but do not need Claude/Codex skill directories.
 
@@ -356,6 +359,7 @@ Now `livery ticket close` pings the group, and you can type `/tickets` in Telegr
 Commands that aren't part of first-time setup but become routine:
 
 - **`livery status`** — at-a-glance dashboard. Open tickets by assignee, stale ones (open ≥ 7 days), blocked ones, recent closes, runtime health. The companion to `livery ticket list` (which is the flat scriptable cut). Run it whenever you sit down to work and want to know where the team stands.
+- **`livery agents`** — list hired agents, their runtimes/models, and the working directories they operate in. Add `--format json` when a harness skill needs valid assignee ids.
 - **`livery memory add/list/search/show`** — record durable decisions, lessons, and preferences as git-tracked markdown under `memory/`. Use this for knowledge that should survive beyond the current chat.
 - **`livery dispatch fan-out <ticket> --to a,b --run`** — dispatch the same ticket to multiple agents in parallel. Each agent gets its own git worktree and output file. Useful for triangulating research outputs across different models, or running the same engineering ticket through Codex and Claude Code for comparison.
 - **`livery upgrade-workspace`** — after a `uv tool upgrade livery` brings in a new framework version, this refreshes the framework-managed parts of your workspace (the `LIVERY-MANAGED` block in `CLAUDE.md`/`AGENTS.md`, shipped skill files, missing memory scaffold) without touching your custom content. Dry-run by default; pass `--apply` to actually write.

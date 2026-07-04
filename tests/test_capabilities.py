@@ -17,6 +17,7 @@ def test_capabilities_text_lists_feature_groups():
     assert "Connect repos" in result.stdout
     assert "livery link <workspace> --repo-id <repo>" in result.stdout
     assert "livery next --format json" in result.stdout
+    assert "livery agents --format json" in result.stdout
     assert "livery memory search <query>" in result.stdout
     assert "livery install-agent-hooks" in result.stdout
     assert "livery telegram register-commands" in result.stdout

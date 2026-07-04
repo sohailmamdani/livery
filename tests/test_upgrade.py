@@ -12,6 +12,8 @@ from livery.init import (
     COS_MANAGED_BLOCK,
     HELLO_SKILL,
     HELLO_SLASH,
+    LIST_AGENTS_SKILL,
+    LIST_AGENTS_SLASH,
     NEW_TICKET_SKILL,
     WALKIE_SKILL,
     WALKIE_SLASH,
@@ -194,6 +196,28 @@ def test_compute_plan_creates_missing_hello_assets(tmp_path):
     assert claude_skill_item.new_content == HELLO_SKILL
     assert codex_skill_item.action == Action.CREATE
     assert codex_skill_item.new_content == HELLO_SKILL
+
+
+def test_compute_plan_creates_missing_list_agents_assets(tmp_path):
+    root = _fresh_workspace(tmp_path, cos_engine="both")
+    command_path = root / ".claude" / "commands" / "livery" / "agents.md"
+    claude_skill_path = root / ".claude" / "skills" / "livery-list-agents" / "SKILL.md"
+    codex_skill_path = root / ".agents" / "skills" / "livery-list-agents" / "SKILL.md"
+    command_path.unlink()
+    claude_skill_path.unlink()
+    codex_skill_path.unlink()
+
+    plan = compute_plan(root)
+    command_item = next(i for i in plan.items if i.path == command_path)
+    claude_skill_item = next(i for i in plan.items if i.path == claude_skill_path)
+    codex_skill_item = next(i for i in plan.items if i.path == codex_skill_path)
+
+    assert command_item.action == Action.CREATE
+    assert command_item.new_content == LIST_AGENTS_SLASH
+    assert claude_skill_item.action == Action.CREATE
+    assert claude_skill_item.new_content == LIST_AGENTS_SKILL
+    assert codex_skill_item.action == Action.CREATE
+    assert codex_skill_item.new_content == LIST_AGENTS_SKILL
 
 
 def test_compute_plan_creates_missing_walkie_assets(tmp_path):

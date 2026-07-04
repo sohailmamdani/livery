@@ -149,6 +149,18 @@ def _relative_path(path: Path, root: Path) -> str:
         return str(path)
 
 
+def _repo_from_resolution(resolution: object) -> str | None:
+    if getattr(resolution, "kind", None) != "linked-repo":
+        return None
+    repo_id = getattr(resolution, "repo_id", None)
+    if repo_id:
+        return str(repo_id)
+    linked_repo_root = getattr(resolution, "linked_repo_root", None)
+    if isinstance(linked_repo_root, Path):
+        return linked_repo_root.name
+    return None
+
+
 def _ticket_payload(
     *,
     post: frontmatter.Post,
@@ -160,6 +172,7 @@ def _ticket_payload(
         "id": str(post.get("id") or path.stem),
         "title": str(post.get("title") or ""),
         "assignee": _json_safe(post.get("assignee")),
+        "repo": _json_safe(post.get("repo")),
         "status": str(post.get("status") or ""),
         "created": _json_safe(post.get("created")),
         "updated": _json_safe(post.get("updated")),
@@ -249,12 +262,52 @@ def _ticket_summary_payload(ticket: object) -> dict[str, Any]:
         "id": getattr(ticket, "id"),
         "title": getattr(ticket, "title"),
         "assignee": getattr(ticket, "assignee"),
+        "repo": getattr(ticket, "repo", None),
         "status": getattr(ticket, "status"),
         "created": created.isoformat() if created else None,
         "updated": updated.isoformat() if updated else None,
         "blocked_on": getattr(ticket, "blocked_on"),
         "age_days": getattr(ticket, "age_days"),
     }
+
+
+def _agent_payload(
+    *,
+    post: frontmatter.Post,
+    path: Path,
+    root: Path,
+) -> dict[str, Any]:
+    agent_id = str(post.get("id") or path.parent.name)
+    prompt_path = path.parent / "AGENTS.md"
+    return {
+        "id": agent_id,
+        "name": str(post.get("name") or agent_id),
+        "runtime": _json_safe(post.get("runtime")),
+        "model": _json_safe(post.get("model")),
+        "effort": _json_safe(post.get("effort")),
+        "cwd": _json_safe(post.get("cwd")),
+        "reports_to": _json_safe(post.get("reports_to")),
+        "hired": _json_safe(post.get("hired")),
+        "role": post.content.strip(),
+        "path": str(path),
+        "relative_path": _relative_path(path, root),
+        "prompt_path": str(prompt_path) if prompt_path.exists() else None,
+        "prompt_relative_path": (
+            _relative_path(prompt_path, root) if prompt_path.exists() else None
+        ),
+        "metadata": _json_safe(dict(post.metadata)),
+    }
+
+
+def _agent_payloads(root: Path) -> list[dict[str, Any]]:
+    agents_dir = root / "agents"
+    if not agents_dir.is_dir():
+        return []
+    agents: list[dict[str, Any]] = []
+    for path in sorted(agents_dir.glob("*/agent.md"), key=lambda p: p.parent.name):
+        post = frontmatter.load(path)
+        agents.append(_agent_payload(post=post, path=path, root=root))
+    return agents
 
 
 def _status_report_payload(report: object) -> dict[str, Any]:
@@ -564,6 +617,7 @@ def memory_search(
 def ticket_new(
     title: str = typer.Option(..., "--title", "-t", prompt=True, help="One-line imperative title"),
     assignee: Optional[str] = typer.Option(None, "--assignee", "-a", help="Agent id, 'cos', or blank for unassigned"),
+    repo: Optional[str] = typer.Option(None, "--repo", help="Linked repo id/name this ticket is about"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Paragraph stating the goal"),
     context: Optional[str] = typer.Option(None, "--context", help="Optional links/constraints/prior decisions"),
     output_format: str = typer.Option(
@@ -575,7 +629,11 @@ def ticket_new(
 ) -> None:
     """Create a new ticket."""
     output_format = _validate_output_format(output_format)
-    root = find_root()
+    resolution = resolve_workspace()
+    root = resolution.workspace_root
+    ticket_repo = repo.strip() if repo and repo.strip() else None
+    if ticket_repo is None:
+        ticket_repo = _repo_from_resolution(resolution)
     now = _now_iso()
     today = now[:10]
     counter = _next_counter(root, today)
@@ -595,15 +653,18 @@ def ticket_new(
         body_parts.append(f"\n## Context\n\n{context}\n")
     body_parts.append(f"\n## Thread\n\n### {now} — user\n{description or '(see description)'}\n")
 
-    post = frontmatter.Post(
-        "".join(body_parts),
-        id=ticket_id,
-        title=title,
-        assignee=assignee,
-        status="open",
-        created=now,
-        updated=now,
-    )
+    metadata: dict[str, object] = {
+        "id": ticket_id,
+        "title": title,
+        "assignee": assignee,
+        "status": "open",
+        "created": now,
+        "updated": now,
+    }
+    if ticket_repo:
+        metadata["repo"] = ticket_repo
+
+    post = frontmatter.Post("".join(body_parts), **metadata)
     path.write_text(frontmatter.dumps(post) + "\n")
     if output_format == "json":
         _echo_json({
@@ -622,6 +683,7 @@ def ticket_new(
 def ticket_list(
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status"),
     assignee: Optional[str] = typer.Option(None, "--assignee", "-a", help="Filter by assignee"),
+    repo: Optional[str] = typer.Option(None, "--repo", help="Filter by repo metadata"),
     output_format: str = typer.Option(
         "text",
         "--format",
@@ -640,10 +702,14 @@ def ticket_list(
             continue
         if assignee and post.get("assignee") != assignee:
             continue
+        ticket_repo = str(post.get("repo") or "-")
+        if repo and ticket_repo != repo:
+            continue
         tickets.append(_ticket_payload(post=post, path=path, root=root))
         rows.append((
             str(post.get("status", "?")),
             str(post.get("assignee") or "-"),
+            ticket_repo,
             str(post.get("id", path.stem)),
             str(post.get("title", "")),
         ))
@@ -653,8 +719,12 @@ def ticket_list(
     if not rows:
         typer.echo("(no tickets)")
         return
-    for status_, assignee_, id_, title_ in rows:
-        typer.echo(f"{status_:<10} {assignee_:<10} {id_}  {title_}")
+    show_repo = bool(repo) or any(repo_ != "-" for _, _, repo_, _, _ in rows)
+    for status_, assignee_, repo_, id_, title_ in rows:
+        if show_repo:
+            typer.echo(f"{status_:<10} {assignee_:<10} {repo_:<12} {id_}  {title_}")
+        else:
+            typer.echo(f"{status_:<10} {assignee_:<10} {id_}  {title_}")
 
 
 @ticket_app.command("show")
@@ -1596,6 +1666,38 @@ def _prompt_runtime(default: Optional[str]) -> str:
         if choice in SUPPORTED_RUNTIMES:
             return choice
         typer.echo(f"  '{choice}' is not a supported runtime. Try again.", err=True)
+
+
+@app.command("agents")
+def agents(
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
+) -> None:
+    """List hired agents in the active workspace."""
+    output_format = _validate_output_format(output_format)
+    root = find_root()
+    agent_records = _agent_payloads(root)
+
+    if output_format == "json":
+        _echo_json({"workspace_root": str(root), "agents": agent_records})
+        return
+
+    if not agent_records:
+        typer.echo("(no agents)")
+        return
+
+    typer.echo(f"{'id':<16} {'runtime':<12} {'model':<24} cwd  name")
+    for agent in agent_records:
+        agent_id = str(agent.get("id") or "-")
+        runtime = str(agent.get("runtime") or "-")
+        model = str(agent.get("model") or "-")
+        cwd = str(agent.get("cwd") or "-")
+        name = str(agent.get("name") or "-")
+        typer.echo(f"{agent_id:<16} {runtime:<12} {model:<24} {cwd}  {name}")
 
 
 @app.command("hire")
