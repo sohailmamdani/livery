@@ -28,6 +28,11 @@ The harness reads the prompt on stdin, runs autonomously with its own tool surfa
 
 Livery passes flags that disable interactive approval gates (`--dangerously-bypass-approvals-and-sandbox` for Codex, `--dangerously-skip-permissions` for Claude Code, `--force` for Cursor). This is intentional: dispatched agents run unattended.
 
+`livery talk` uses the same runtime identities but a different, advisory
+command shape. It does not pass those unattended-dispatch bypass flags, and the
+prompt tells the agent not to modify files. If the conversation becomes actual
+work, file a ticket and dispatch it.
+
 Agent frontmatter can also tune the runtime command:
 
 - `model` is passed to CLI harnesses as `--model <model>` when present. For `lm_studio` and `ollama`, `model` is required because Livery sends it in the OpenAI-compatible chat-completions request.

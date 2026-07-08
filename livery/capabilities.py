@@ -127,6 +127,20 @@ CAPABILITIES: tuple[Capability, ...] = (
         agent_note="Read dispatch output before summarizing delegated work back to the user.",
     ),
     Capability(
+        id="talk",
+        group="Coordinate agents",
+        title="Talk directly with a hired agent",
+        summary="Ask a hired agent an advisory question and store the exchange in a transcript.",
+        commands=(
+            'livery talk <agent-id> "..."',
+            'livery talk <agent-id> "..." --session <topic>',
+            "livery talk list",
+            "livery talk show <session>",
+        ),
+        when="Use when the operator wants another agent's judgment without launching another terminal or dispatching work.",
+        agent_note="Talk is advisory; create or dispatch a ticket for state-changing implementation.",
+    ),
+    Capability(
         id="walkie-talkie",
         group="Structured debate",
         title="Run structured AI-to-AI debate",

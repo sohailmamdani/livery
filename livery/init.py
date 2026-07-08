@@ -89,6 +89,7 @@ LIVERY_COMMAND_GROUP = "livery"
 LIVERY_HELLO_SKILL_NAME = "livery-hello"
 LIVERY_LIST_AGENTS_SKILL_NAME = "livery-list-agents"
 LIVERY_NEW_TICKET_SKILL_NAME = "livery-new-ticket"
+LIVERY_TALK_SKILL_NAME = "livery-talk-agent"
 LIVERY_WALKIE_SKILL_NAME = "livery-walkie-talkie"
 
 
@@ -158,6 +159,9 @@ you, not the intern-compliance version.
   state.
 - When you need valid hired-agent ids, runtimes, models, or working directories,
   run `livery agents --format json` instead of hand-scanning `agents/`.
+- When the user wants to ask a hired agent a direct advisory question, use
+  `livery talk <agent-id> "..."`. Talk is for conversation, not implementation;
+  turn state-changing work into a ticket and dispatch it explicitly.
 - When acting programmatically or advising another agent, prefer structured
   output: `livery next --format json`, `livery capabilities --format json`,
   and `--format json` on agents, ticket, memory, dispatch, where, and
@@ -257,6 +261,28 @@ Steps:
    dispatching, or starting Walkie-Talkies.
 """
 
+
+TALK_SLASH = """---
+description: Talk directly with a hired Livery agent
+argument-hint: [agent-id] [message]
+livery: managed
+---
+
+Help the user ask a hired agent a direct advisory question without leaving
+this harness.
+
+Steps:
+1. Run `livery agents --format json` if the target agent id is missing or
+   ambiguous.
+2. For a new message, run `livery talk <agent-id> "<message>" --format json`.
+   If the user names a topic or ongoing thread, add `--session <session-id>`.
+3. Read the JSON reply and summarize the agent's answer back to the user.
+4. If the user wants implementation or file changes, create or dispatch a
+   ticket instead of using Talk as a hidden edit path.
+5. Use `livery talk list --format json` and `livery talk show <session>` when
+   the user asks to inspect prior Talk transcripts.
+"""
+
 NEW_TICKET_SKILL = """---
 name: livery-new-ticket
 description: Create a new Livery ticket to track work or delegate to an agent. Use when the user says "create a ticket", "new ticket", "file a ticket", invokes the Livery ticket command, or describes a unit of work that should be formalized.
@@ -343,6 +369,36 @@ Use this skill to get the current hired-agent inventory from Livery's CLI.
 
 Do not hand-scan `agents/` unless the command fails; the command resolves
 linked repos and normalizes the agent metadata.
+"""
+
+
+TALK_SKILL = """---
+name: livery-talk-agent
+description: Talk directly with a hired Livery agent from the current harness. Use when the user asks to ask/message/speak to a specific agent for advice without launching another terminal.
+livery: managed
+---
+
+# Talk To A Livery Agent
+
+Use this skill when the user wants an advisory exchange with a hired agent
+from the current harness.
+
+## Steps
+
+1. Identify the target agent id. If it is missing or ambiguous, run
+   `livery agents --format json` and use ids exactly as returned.
+2. Run `livery talk <agent-id> "<message>" --format json`.
+   If this is part of an ongoing topic, include `--session <session-id>`.
+3. Read the JSON reply and give the user the useful substance of the
+   agent's response. Mention the transcript path when useful.
+4. For previous conversations, use `livery talk list --format json` and
+   `livery talk show <session>`.
+
+## Boundaries
+
+Talk is for direct conversation and review. It is not the hidden execution
+path for implementation. If the user wants the agent to mutate files, create
+or dispatch a Livery ticket instead.
 """
 
 
@@ -742,11 +798,13 @@ def init_workspace(
             _install_skill_file(command_group / "hello.md", HELLO_SLASH)
             _install_skill_file(command_group / "agents.md", LIST_AGENTS_SLASH)
             _install_skill_file(command_group / "ticket.md", TICKET_SLASH)
+            _install_skill_file(command_group / "talk.md", TALK_SLASH)
             _install_skill_file(command_group / "walkie.md", WALKIE_SLASH)
         if engine.skills_dir:
             _install_skill_file(target / engine.skills_dir / LIVERY_HELLO_SKILL_NAME / "SKILL.md", HELLO_SKILL)
             _install_skill_file(target / engine.skills_dir / LIVERY_LIST_AGENTS_SKILL_NAME / "SKILL.md", LIST_AGENTS_SKILL)
             _install_skill_file(target / engine.skills_dir / LIVERY_NEW_TICKET_SKILL_NAME / "SKILL.md", NEW_TICKET_SKILL)
+            _install_skill_file(target / engine.skills_dir / LIVERY_TALK_SKILL_NAME / "SKILL.md", TALK_SKILL)
             _install_skill_file(target / engine.skills_dir / LIVERY_WALKIE_SKILL_NAME / "SKILL.md", WALKIE_SKILL)
 
     return result

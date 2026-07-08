@@ -228,6 +228,34 @@ def _dispatch_prep_payload(prep: object) -> dict[str, Any]:
     }
 
 
+def _talk_result_payload(result: object, *, root: Path) -> dict[str, Any]:
+    return {
+        "session_id": getattr(result, "session_id"),
+        "agent_id": getattr(result, "agent_id"),
+        "ok": getattr(result, "ok"),
+        "exit_code": getattr(result, "exit_code"),
+        "reply": getattr(result, "reply"),
+        "transcript_path": str(getattr(result, "transcript_path")),
+        "relative_transcript_path": _relative_path(getattr(result, "transcript_path"), root),
+        "prompt_path": str(getattr(result, "prompt_path")),
+        "output_path": str(getattr(result, "output_path")),
+        "command": getattr(result, "command"),
+    }
+
+
+def _talk_transcript_payload(transcript: object, *, root: Path) -> dict[str, Any]:
+    return {
+        "session_id": getattr(transcript, "session_id"),
+        "agent_id": getattr(transcript, "agent_id"),
+        "started": getattr(transcript, "started"),
+        "updated": getattr(transcript, "updated"),
+        "message_count": getattr(transcript, "message_count"),
+        "last_speaker": getattr(transcript, "last_speaker"),
+        "path": str(getattr(transcript, "path")),
+        "relative_path": _relative_path(getattr(transcript, "path"), root),
+    }
+
+
 def _dispatch_view_payload(view: object) -> dict[str, Any]:
     attempt = getattr(view, "attempt", None)
     inferred_status = getattr(view, "inferred_status", None)
@@ -1698,6 +1726,114 @@ def agents(
         cwd = str(agent.get("cwd") or "-")
         name = str(agent.get("name") or "-")
         typer.echo(f"{agent_id:<16} {runtime:<12} {model:<24} {cwd}  {name}")
+
+
+@app.command("talk")
+def talk(
+    target: str = typer.Argument(..., help="Agent id, or `list` / `show`."),
+    message: Optional[str] = typer.Argument(None, help="Message text, or session id for `show`."),
+    session: Optional[str] = typer.Option(None, "--session", "-s", help="Transcript session id. Defaults to the agent id."),
+    timeout_seconds: int = typer.Option(600, "--timeout", help="Runtime timeout in seconds."),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
+) -> None:
+    """Talk directly with a hired agent and store an append-only transcript."""
+    from .talk import (
+        list_transcripts,
+        load_transcript,
+        resolve_transcript,
+        run_talk_turn,
+    )
+
+    output_format = _validate_output_format(output_format)
+    root = find_root()
+
+    if target == "list":
+        if message:
+            typer.echo("Usage: livery talk list [--format json]", err=True)
+            raise typer.Exit(1)
+        transcripts = list_transcripts(root)
+        if output_format == "json":
+            _echo_json({
+                "workspace_root": str(root),
+                "talk": [_talk_transcript_payload(t, root=root) for t in transcripts],
+            })
+            return
+        if not transcripts:
+            typer.echo("No talk transcripts in this workspace.")
+            return
+        typer.echo(f"Talk transcripts in {root}/talk/:")
+        typer.echo()
+        for transcript in transcripts:
+            typer.echo(f"  {transcript.session_id}")
+            typer.echo(
+                f"    agent: {transcript.agent_id}  messages: {transcript.message_count}  "
+                f"updated: {transcript.updated or '-'}"
+            )
+        return
+
+    if target == "show":
+        if not message:
+            typer.echo("Usage: livery talk show <session> [--format json]", err=True)
+            raise typer.Exit(1)
+        try:
+            path = resolve_transcript(root, message)
+            transcript = load_transcript(path)
+        except (FileNotFoundError, ValueError) as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1)
+        if output_format == "json":
+            _echo_json({
+                "workspace_root": str(root),
+                "talk": _talk_transcript_payload(transcript, root=root),
+                "content": path.read_text(),
+            })
+            return
+        typer.echo(f"# {path}")
+        typer.echo(
+            f"# session={transcript.session_id}  agent={transcript.agent_id}  "
+            f"messages={transcript.message_count}"
+        )
+        typer.echo()
+        typer.echo(path.read_text())
+        return
+
+    if not message:
+        typer.echo('Usage: livery talk <agent-id> "<message>" [--session <id>]', err=True)
+        raise typer.Exit(1)
+
+    try:
+        result = run_talk_turn(
+            workspace_root=root,
+            agent_id=target,
+            message=message,
+            session_id=session,
+            timeout_seconds=timeout_seconds,
+        )
+    except (ValueError, FileNotFoundError, NotImplementedError) as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    if output_format == "json":
+        _echo_json({"workspace_root": str(root), "talk": _talk_result_payload(result, root=root)})
+        return
+
+    if result.ok:
+        typer.echo(result.reply)
+        typer.echo()
+        typer.echo(f"Transcript: {result.transcript_path}")
+    else:
+        typer.echo(
+            f"Talk runtime exited with {result.exit_code}. Output: {result.output_path}",
+            err=True,
+        )
+        if result.reply:
+            typer.echo(result.reply, err=True)
+        raise typer.Exit(result.exit_code or 1)
 
 
 @app.command("hire")

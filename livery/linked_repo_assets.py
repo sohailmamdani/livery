@@ -92,6 +92,29 @@ Steps:
 """
 
 
+LINKED_REPO_TALK_SLASH = """---
+description: Talk directly with a parent-workspace Livery agent
+argument-hint: [agent-id] [message]
+livery: managed
+---
+
+Help the user ask a parent-workspace hired agent a direct advisory question
+from this linked project repo.
+
+Steps:
+1. Run `livery where --format json` and confirm `resolution.kind` is
+   `linked-repo`.
+2. Run `livery agents --format json` if the target agent id is missing or
+   ambiguous.
+3. Run `livery talk <agent-id> "<message>" --format json`. If this is an
+   ongoing repo-local topic, include `--session <repo-or-topic-id>`.
+4. Summarize the reply and make clear the transcript was created in the
+   parent workspace's `talk/` directory.
+5. If the user wants implementation or file changes in this repo, create or
+   dispatch a ticket instead of using Talk as a hidden edit path.
+"""
+
+
 LINKED_REPO_WALKIE_SLASH = """---
 description: Create a parent-workspace Walkie-Talkie from this linked repo
 argument-hint: [topic] [--with peer-id]
@@ -202,6 +225,35 @@ workspace through Livery's CLI.
 """
 
 
+LINKED_REPO_TALK_SKILL = """---
+name: livery-talk-agent
+description: Talk directly with a parent-workspace Livery agent from this linked project repo. Use when the user asks to ask/message/speak to a specific agent for advice without launching another terminal.
+livery: managed
+---
+
+# Talk To A Livery Agent From A Linked Repo
+
+This repo is only the work surface. Talk transcripts live in the parent workspace, which is the Livery workspace linked from this repo.
+
+## Steps
+
+1. Run `livery where --format json` and confirm `resolution.kind` is
+   `linked-repo`.
+2. Identify the target agent id. If it is missing or ambiguous, run
+   `livery agents --format json` and use ids exactly as returned.
+3. Run `livery talk <agent-id> "<message>" --format json`.
+   If this is an ongoing repo-local topic, include `--session <session-id>`.
+4. Read the JSON reply and give the user the useful substance of the
+   agent's response. Mention that the transcript belongs to the parent
+   workspace when useful.
+
+## Boundary
+
+Talk is advisory. For file changes in this repo, create or dispatch a Livery
+ticket instead.
+"""
+
+
 LINKED_REPO_WALKIE_SKILL = """---
 name: livery-walkie-talkie
 description: Create or continue a parent-workspace Livery Walkie-Talkie from this linked project repo. Use when the user invokes /livery-walkie-talkie or asks to plan/debate a feature from a linked repo.
@@ -303,6 +355,7 @@ def install_linked_repo_assets(
             ("livery-hello.md", LINKED_REPO_HELLO_SLASH),
             ("livery-list-agents.md", LINKED_REPO_LIST_AGENTS_SLASH),
             ("livery-new-ticket.md", LINKED_REPO_NEW_TICKET_SLASH),
+            ("livery-talk-agent.md", LINKED_REPO_TALK_SLASH),
             ("livery-walkie-talkie.md", LINKED_REPO_WALKIE_SLASH),
         ):
             results.append(
@@ -317,6 +370,7 @@ def install_linked_repo_assets(
             ("livery-hello", LINKED_REPO_HELLO_SKILL),
             ("livery-list-agents", LINKED_REPO_LIST_AGENTS_SKILL),
             ("livery-new-ticket", LINKED_REPO_NEW_TICKET_SKILL),
+            ("livery-talk-agent", LINKED_REPO_TALK_SKILL),
             ("livery-walkie-talkie", LINKED_REPO_WALKIE_SKILL),
         ):
             results.append(
@@ -333,6 +387,7 @@ def install_linked_repo_assets(
             ("livery-hello", LINKED_REPO_HELLO_SKILL),
             ("livery-list-agents", LINKED_REPO_LIST_AGENTS_SKILL),
             ("livery-new-ticket", LINKED_REPO_NEW_TICKET_SKILL),
+            ("livery-talk-agent", LINKED_REPO_TALK_SKILL),
             ("livery-walkie-talkie", LINKED_REPO_WALKIE_SKILL),
         ):
             results.append(

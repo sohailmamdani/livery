@@ -343,13 +343,18 @@ def test_livery_link_command_writes_marker_and_git_exclude(tmp_path, monkeypatch
     assert LINK_MARKER in (repo / ".git" / "info" / "exclude").read_text()
     assert (repo / ".agents" / "skills" / "livery-hello" / "SKILL.md").exists()
     assert (repo / ".agents" / "skills" / "livery-list-agents" / "SKILL.md").exists()
+    assert (repo / ".agents" / "skills" / "livery-talk-agent" / "SKILL.md").exists()
     assert (repo / ".claude" / "commands" / "livery-list-agents.md").exists()
     assert (repo / ".claude" / "commands" / "livery-new-ticket.md").exists()
+    assert (repo / ".claude" / "commands" / "livery-talk-agent.md").exists()
     assert "linked project repo" in (
         repo / ".agents" / "skills" / "livery-hello" / "SKILL.md"
     ).read_text()
     assert "livery agents --format json" in (
         repo / ".agents" / "skills" / "livery-list-agents" / "SKILL.md"
+    ).read_text()
+    assert "livery talk <agent-id>" in (
+        repo / ".agents" / "skills" / "livery-talk-agent" / "SKILL.md"
     ).read_text()
     assert "parent workspace" in (
         repo / ".claude" / "commands" / "livery-new-ticket.md"

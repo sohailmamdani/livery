@@ -41,6 +41,10 @@ livery ticket show <ticket-id> --format json
 livery ticket close <ticket-id> --summary "..." --no-push --format json
 livery memory add --type lesson --title "..." --body "..." --format json
 livery memory search <query> --format json
+livery talk <agent-id> "..." --format json
+livery talk <agent-id> "..." --session <topic> --format json
+livery talk list --format json
+livery talk show <session> --format json
 livery dispatch prep <ticket-id> --worktree --format json
 livery dispatch fan-out <ticket-id> --to a,b --format json
 livery dispatch status --format json

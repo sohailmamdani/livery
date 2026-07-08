@@ -18,6 +18,7 @@ Tech-savvy operators (not necessarily programmers) who want an AI workforce on t
 - **Workspace memory** for durable decisions, lessons, and preferences as git-tracked markdown.
 - **Runtime adapters** so agents can live on different stacks: Claude Code CLI, Codex CLI, Cursor, LM Studio, Ollama. Adding a new adapter is ~30 lines of Python.
 - **Durable dispatch attempts** under `.livery/dispatch/attempts/`, with status, PID, failures, hook outcomes, prompt path, and output path recorded per run.
+- **Talk** for direct advisory conversations with a hired agent from your current harness, backed by append-only transcripts.
 - **Walkie-Talkie** for structured AI-to-AI debate, either manual append-only transcripts or automated alternating dispatches between two hired agents.
 - **Discoverability commands, startup hooks, and a Livery hello skill** so CoS sessions can ask Livery what applies from the current directory instead of guessing from stale docs.
 - **Telegram integration** — close a ticket, get a ping.
@@ -115,8 +116,8 @@ cd ~/code/my-project
 livery link ~/companies/my-first-company --repo-id my-project
 livery install-agent-hooks              # install linked-repo startup awareness here too
 # Also installs linked-repo Livery entrypoints:
-# Claude Code: /livery-hello, /livery-list-agents, /livery-new-ticket, /livery-walkie-talkie
-# Codex: livery-hello, livery-list-agents, livery-new-ticket, livery-walkie-talkie skills
+# Claude Code: /livery-hello, /livery-list-agents, /livery-new-ticket, /livery-talk-agent, /livery-walkie-talkie
+# Codex: livery-hello, livery-list-agents, livery-new-ticket, livery-talk-agent, livery-walkie-talkie skills
 
 # If this repo was already initialized as a standalone workspace, migrate it
 # into the shared workspace while linking it.
@@ -134,6 +135,12 @@ livery ticket list --repo my-project
 livery memory add --type lesson --title "Review dispatch output before closing" --body "..."
 livery memory search dispatch
 
+# Ask a hired agent an advisory question without leaving this harness
+livery talk web-swe "What do you think about this API boundary?"
+livery talk web-swe "Follow-up question" --session api-boundary
+livery talk list
+livery talk show api-boundary
+
 # Dispatch a ticket to its assigned agent (composes prompt + prints command)
 livery dispatch prep <ticket-id>
 
@@ -144,7 +151,7 @@ livery ticket close <ticket-id> --summary "Shipped v1 copy."
 livery ticket close <ticket-id> --status cancelled --summary "Folded into the new schema."
 ```
 
-`livery next`, `livery capabilities`, and `livery session-brief` are intentionally useful to both humans and CoS agents. Add `--format json` when Codex, Claude Code, or another tool needs structured output instead of prose. `livery install-agent-hooks` wires `session-brief` into Codex / Claude Code `SessionStart` hooks for the current workspace or linked repo. In a linked repo, `livery link` and `livery install-agent-hooks` also install linked-repo-specific Livery entrypoints so the harness knows tickets and Walkie-Talkies belong in the parent workspace.
+`livery next`, `livery capabilities`, and `livery session-brief` are intentionally useful to both humans and CoS agents. Add `--format json` when Codex, Claude Code, or another tool needs structured output instead of prose. `livery install-agent-hooks` wires `session-brief` into Codex / Claude Code `SessionStart` hooks for the current workspace or linked repo. In a linked repo, `livery link` and `livery install-agent-hooks` also install linked-repo-specific Livery entrypoints so the harness knows tickets, Talk transcripts, and Walkie-Talkies belong in the parent workspace.
 
 If hooks are not installed or you want an explicit session handshake, use the shipped Livery hello entry point. Claude Code gets a grouped Livery slash command in workspaces and `/livery-hello` in linked repos; Codex gets the `livery-hello` skill. It runs `livery session-brief`, acknowledges the active workspace or linked repo, then runs `livery status` for a quick board check.
 
@@ -152,7 +159,7 @@ For a repo that was linked before Livery shipped linked-repo entrypoints, update
 
 ## Workspace layout
 
-A typical workspace looks like this. `livery init` creates the core scaffold; runtime state directories such as `.livery/` and `walkie-talkie/` appear on first use.
+A typical workspace looks like this. `livery init` creates the core scaffold; runtime state directories such as `.livery/`, `talk/`, and `walkie-talkie/` appear on first use.
 
 ```
 my-workspace/
@@ -165,24 +172,28 @@ my-workspace/
 │   ├── decisions/
 │   ├── lessons/
 │   └── preferences/
+├── talk/                                      # append-only operator-to-agent transcripts, created on first use
 ├── walkie-talkie/                             # append-only AI-to-AI debate transcripts, created on first use
-├── .livery/                                   # ignored runtime state: dispatch attempts, hook logs, walkie prompts
+├── .livery/                                   # ignored runtime state: dispatch attempts, hook logs, talk/walkie prompts
 ├── .claude/                                   # Claude Code's skill discovery dir
 │   ├── commands/livery/                       # grouped Livery slash commands
 │   │   ├── hello.md                           # Livery orientation command
 │   │   ├── agents.md                          # Livery agent inventory command
 │   │   ├── ticket.md                          # Livery ticket command
+│   │   ├── talk.md                            # Livery direct-agent talk command
 │   │   └── walkie.md                          # Livery walkie command
 │   └── skills/
 │       ├── livery-hello/SKILL.md
 │       ├── livery-list-agents/SKILL.md
 │       ├── livery-new-ticket/SKILL.md
+│       ├── livery-talk-agent/SKILL.md
 │       └── livery-walkie-talkie/SKILL.md
 └── .agents/                                   # Codex's skill discovery dir (.agents/skills)
     └── skills/
         ├── livery-hello/SKILL.md
         ├── livery-list-agents/SKILL.md
         ├── livery-new-ticket/SKILL.md
+        ├── livery-talk-agent/SKILL.md
         └── livery-walkie-talkie/SKILL.md
 ```
 
@@ -242,6 +253,24 @@ List hired agents and their configured runtimes/cwds:
 livery agents
 livery agents --format json
 ```
+
+## Talk
+
+Talk is for direct advisory conversation with a hired agent while staying in
+your current harness. It spawns the agent runtime in print mode, includes the
+agent's `AGENTS.md`, appends the exchange to `talk/<session>.md`, and returns
+the reply.
+
+```sh
+livery talk web-swe "Should this be a server-side export?"
+livery talk web-swe "What would you check next?" --session pdf-export
+livery talk list
+livery talk show pdf-export
+```
+
+By default, Talk is not an implementation path. The prompt tells the agent not
+to modify files, commit, install dependencies, or launch long-running work. If
+the conversation turns into a task, file a ticket and dispatch it explicitly.
 
 ## Dispatch
 

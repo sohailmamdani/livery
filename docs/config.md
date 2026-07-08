@@ -149,13 +149,13 @@ Repo id:   api
 By default, `livery link` adds `.livery-link.toml` to `.git/info/exclude` when the project has a normal `.git/` directory. That keeps machine-local absolute paths out of commits. Use `--no-exclude` if you intentionally want to commit the link file.
 
 All workspace-level commands honor the link. For example, if you run
-`livery walkie new ...` or `livery walkie auto ...` from the project repo,
-the walkie transcript is created under the linked workspace's
-`walkie-talkie/` directory, not inside the project repo. Relative `@file`
-arguments, such as `--briefing @feature-plan.md`, are still read relative to
-the current working directory where you invoked the command, which lets a
-source repo supply planning context while the parent workspace owns the
-conversation record.
+`livery talk ...`, `livery walkie new ...`, or `livery walkie auto ...` from
+the project repo, the durable transcript is created under the linked
+workspace's `talk/` or `walkie-talkie/` directory, not inside the project repo.
+Relative `@file` arguments, such as `--briefing @feature-plan.md`, are still
+read relative to the current working directory where you invoked the command,
+which lets a source repo supply planning context while the parent workspace
+owns the conversation record.
 
 If a project repo was already initialized with `livery init`, plain `livery link` refuses to write an ineffective link beside the existing `livery.toml`. Use the cleanup migration instead:
 
@@ -181,7 +181,7 @@ For Claude Code, Livery writes:
 
 The startup brief tells the CoS whether the current directory is a workspace, linked repo, or legacy framework repo; includes concise workspace status; and instructs the CoS to acknowledge that Livery context to the user.
 
-When run from a linked repo, `livery install-agent-hooks` also installs a small linked-repo harness overlay beside the project code. Claude Code gets `/livery-hello`, `/livery-list-agents`, `/livery-new-ticket`, and `/livery-walkie-talkie`; Codex gets matching `livery-hello`, `livery-list-agents`, `livery-new-ticket`, and `livery-walkie-talkie` skills. These are materially different from the parent-workspace entrypoints: they first confirm the repo link, then tell the harness that Livery agents, tickets, and Walkie-Talkie transcripts are resolved through the parent workspace while repo-local paths and branch context still matter.
+When run from a linked repo, `livery install-agent-hooks` also installs a small linked-repo harness overlay beside the project code. Claude Code gets `/livery-hello`, `/livery-list-agents`, `/livery-new-ticket`, `/livery-talk-agent`, and `/livery-walkie-talkie`; Codex gets matching `livery-hello`, `livery-list-agents`, `livery-new-ticket`, `livery-talk-agent`, and `livery-walkie-talkie` skills. These are materially different from the parent-workspace entrypoints: they first confirm the repo link, then tell the harness that Livery agents, tickets, Talk transcripts, and Walkie-Talkie transcripts are resolved through the parent workspace while repo-local paths and branch context still matter.
 
 To update a repo that was linked before this overlay existed, update Livery, `cd` into the linked repo, and run `livery install-agent-hooks` again. Livery updates managed linked-repo entrypoints and reports any user-written files it skipped.
 
@@ -311,6 +311,7 @@ Shipped skills today:
 - **`livery-hello`** — entry handshake for a new session. Runs `livery session-brief`, acknowledges the workspace or linked repo, then runs `livery status`.
 - **`livery-list-agents`** — lists hired agents by running `livery agents --format json`.
 - **`livery-new-ticket`** — helps turn user intent into a markdown ticket.
+- **`livery-talk-agent`** — asks a hired agent a direct advisory question with `livery talk`.
 - **`livery-walkie-talkie`** — starts or continues append-only AI-to-AI debate.
 
 Both `SKILL.md` formats use the same frontmatter (`name`, `description`) and prose body, so the file content is identical between engines — only the discovery path differs.

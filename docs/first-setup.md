@@ -142,21 +142,24 @@ my-first-company/
 │   │   ├── hello.md                 # Livery orientation command
 │   │   ├── agents.md                # Livery agent inventory command
 │   │   ├── ticket.md                # Livery ticket command
+│   │   ├── talk.md                  # Livery direct-agent talk command
 │   │   └── walkie.md                # Livery walkie command
 │   └── skills/
 │       ├── livery-hello/SKILL.md
 │       ├── livery-list-agents/SKILL.md
 │       ├── livery-new-ticket/SKILL.md
+│       ├── livery-talk-agent/SKILL.md
 │       └── livery-walkie-talkie/SKILL.md
 └── .agents/                         # Codex skill discovery (.agents/skills)
     └── skills/
         ├── livery-hello/SKILL.md
         ├── livery-list-agents/SKILL.md
         ├── livery-new-ticket/SKILL.md
+        ├── livery-talk-agent/SKILL.md
         └── livery-walkie-talkie/SKILL.md
 ```
 
-`CLAUDE.md` and `AGENTS.md` have identical content — they're named for the two engines that auto-load them. The shipped `livery-hello`, `livery-list-agents`, `livery-new-ticket`, and `livery-walkie-talkie` skills are scaffolded under `.claude/` for Claude Code and `.agents/` for Codex. Claude Code slash commands are grouped under `.claude/commands/livery/` so they do not occupy generic harness command names. Delete whichever pair you don't use, or keep both if you move between engines.
+`CLAUDE.md` and `AGENTS.md` have identical content — they're named for the two engines that auto-load them. The shipped `livery-hello`, `livery-list-agents`, `livery-new-ticket`, `livery-talk-agent`, and `livery-walkie-talkie` skills are scaffolded under `.claude/` for Claude Code and `.agents/` for Codex. Claude Code slash commands are grouped under `.claude/commands/livery/` so they do not occupy generic harness command names. Delete whichever pair you don't use, or keep both if you move between engines.
 
 If you used `--cos-engine claude_code`, only `CLAUDE.md` and `.claude/` get scaffolded. If you used `--cos-engine codex`, only `AGENTS.md` and `.agents/` get scaffolded — no stray Claude-specific files in your workspace. Pi and OpenCode use `AGENTS.md` but do not need Claude/Codex skill directories.
 

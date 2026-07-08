@@ -74,15 +74,18 @@ def test_init_workspace_creates_standard_layout(tmp_path):
     assert Path(".claude/commands/livery/hello.md") in paths
     assert Path(".claude/commands/livery/agents.md") in paths
     assert Path(".claude/commands/livery/ticket.md") in paths
+    assert Path(".claude/commands/livery/talk.md") in paths
     assert Path(".claude/commands/livery/walkie.md") in paths
     assert Path(".claude/skills/livery-hello/SKILL.md") in paths
     assert Path(".claude/skills/livery-list-agents/SKILL.md") in paths
     assert Path(".claude/skills/livery-new-ticket/SKILL.md") in paths
+    assert Path(".claude/skills/livery-talk-agent/SKILL.md") in paths
     assert Path(".claude/skills/livery-walkie-talkie/SKILL.md") in paths
     # Codex assets
     assert Path(".agents/skills/livery-hello/SKILL.md") in paths
     assert Path(".agents/skills/livery-list-agents/SKILL.md") in paths
     assert Path(".agents/skills/livery-new-ticket/SKILL.md") in paths
+    assert Path(".agents/skills/livery-talk-agent/SKILL.md") in paths
     assert Path(".agents/skills/livery-walkie-talkie/SKILL.md") in paths
 
 
@@ -129,6 +132,7 @@ def test_init_workspace_cos_engine_claude_code_only(tmp_path):
     assert (target / ".claude" / "skills" / "livery-hello" / "SKILL.md").exists()
     assert (target / ".claude" / "skills" / "livery-list-agents" / "SKILL.md").exists()
     assert (target / ".claude" / "skills" / "livery-new-ticket" / "SKILL.md").exists()
+    assert (target / ".claude" / "skills" / "livery-talk-agent" / "SKILL.md").exists()
     assert (target / ".claude" / "commands" / "livery" / "hello.md").exists()
     assert (target / ".claude" / "commands" / "livery" / "agents.md").exists()
     assert (target / ".claude" / "commands" / "livery" / "ticket.md").exists()
@@ -148,6 +152,7 @@ def test_init_workspace_cos_engine_codex_only(tmp_path):
     assert (target / ".agents" / "skills" / "livery-hello" / "SKILL.md").exists()
     assert (target / ".agents" / "skills" / "livery-list-agents" / "SKILL.md").exists()
     assert (target / ".agents" / "skills" / "livery-new-ticket" / "SKILL.md").exists()
+    assert (target / ".agents" / "skills" / "livery-talk-agent" / "SKILL.md").exists()
     # Walkie-talkie skill installed for Codex too — initiating from
     # either harness must work
     assert (target / ".agents" / "skills" / "livery-walkie-talkie" / "SKILL.md").exists()
@@ -194,6 +199,7 @@ def test_init_workspace_multiple_engines_dedupe_filenames(tmp_path):
     assert Path(".agents/skills/livery-hello/SKILL.md") in paths
     assert Path(".agents/skills/livery-list-agents/SKILL.md") in paths
     assert Path(".agents/skills/livery-new-ticket/SKILL.md") in paths
+    assert Path(".agents/skills/livery-talk-agent/SKILL.md") in paths
     assert Path(".agents/skills/livery-walkie-talkie/SKILL.md") in paths
     # CLAUDE.md not requested
     assert not (target / "CLAUDE.md").exists()
