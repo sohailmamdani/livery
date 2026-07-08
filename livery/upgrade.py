@@ -12,9 +12,9 @@ Hard guardrails:
   and the user-editable sections of CLAUDE.md / AGENTS.md (everything
   outside the LIVERY-MANAGED markers) are off-limits regardless.
 - **Dry-run by default.** Pass `--apply` to actually write changes.
-- **Skill files only created if missing.** Existing skill files aren't
-  overwritten — users may have customized them. The upgrade adds new
-  skills shipped by the framework.
+- **Skill files only created if missing by default.** Existing skill files
+  aren't overwritten unless `--force` is passed — users may have customized
+  them. The upgrade adds new skills shipped by the framework.
 
 The framework-managed parts are:
 
@@ -84,7 +84,7 @@ class PlanItem:
     path: Path
     action: Action
     reason: str
-    new_content: str | None = None  # full file content to write, when action != SKIP/WARN
+    new_content: str | None = None  # full file content to write, when available
 
 
 @dataclass(slots=True)
@@ -275,6 +275,7 @@ def _plan_skill_file(path: Path, content: str) -> PlanItem:
         path=path,
         action=Action.WARN,
         reason="exists but differs from current shipped version — likely customized; skipping (use --force to overwrite)",
+        new_content=content,
     )
 
 
@@ -474,8 +475,6 @@ def apply_plan(plan: UpgradePlan, force: bool = False) -> list[PlanItem]:
         if item.action == Action.WARN and not force:
             continue
         if item.new_content is None:
-            # WARN with --force still has no content — skip; the warn case
-            # without content means there's no canonical replacement to write.
             continue
         item.path.parent.mkdir(parents=True, exist_ok=True)
         item.path.write_text(item.new_content)

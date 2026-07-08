@@ -2227,9 +2227,16 @@ def upgrade_workspace(
     }
     for item in plan.items:
         rel = item.path.relative_to(root)
-        typer.echo(f"  [{label[item.action]}] {rel}")
+        item_label = "force " if item.action == Action.WARN and force else label[item.action]
+        typer.echo(f"  [{item_label}] {rel}")
         if item.action != Action.SKIP:
-            typer.echo(f"           — {item.reason}")
+            reason = item.reason
+            if item.action == Action.WARN and force:
+                reason = (
+                    "exists but differs from current shipped version — "
+                    "will overwrite because --force was passed"
+                )
+            typer.echo(f"           — {reason}")
 
     if not plan.has_changes:
         typer.echo("\nNothing to do — workspace scaffolding is current with the running Livery version.")

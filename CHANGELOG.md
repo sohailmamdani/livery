@@ -4,6 +4,9 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Fixed
+- `livery upgrade-workspace --apply --force` now actually overwrites customized shipped skill and slash-command files, and its output says those files will be overwritten instead of telling the user to pass `--force`.
+
 ## 0.18.0 — 2026-07-08
 
 ### Added

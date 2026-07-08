@@ -164,7 +164,7 @@ def test_compute_plan_warns_on_customized_skill(tmp_path):
     plan = compute_plan(root)
     item = next(i for i in plan.items if i.path == skill_path)
     assert item.action == Action.WARN
-    assert item.new_content is None  # nothing to apply without --force
+    assert item.new_content == NEW_TICKET_SKILL  # available when applying with --force
 
 
 def test_compute_plan_creates_missing_skill(tmp_path):
@@ -442,6 +442,34 @@ def test_apply_plan_skips_warned_items_without_force(tmp_path):
     assert all(item.path != skill_path for item in written)
     # File still has custom content
     assert skill_path.read_text() == "custom skill content"
+
+
+def test_apply_plan_overwrites_warned_items_with_force(tmp_path):
+    root = _fresh_workspace(tmp_path, cos_engine="claude_code")
+    skill_path = root / ".claude" / "skills" / "livery-new-ticket" / "SKILL.md"
+    skill_path.write_text("custom skill content")
+
+    plan = compute_plan(root)
+    written = apply_plan(plan, force=True)
+
+    assert any(item.path == skill_path for item in written)
+    assert skill_path.read_text() == NEW_TICKET_SKILL
+
+
+def test_upgrade_workspace_force_reports_and_overwrites_customized_skill(tmp_path, monkeypatch):
+    root = _fresh_workspace(tmp_path, cos_engine="claude_code")
+    skill_path = root / ".claude" / "skills" / "livery-new-ticket" / "SKILL.md"
+    skill_path.write_text("custom skill content")
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(app, ["upgrade-workspace", "--apply", "--force"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "[force ] .claude/skills/livery-new-ticket/SKILL.md" in result.stdout
+    assert "will overwrite because --force was passed" in result.stdout
+    assert "use --force to overwrite" not in result.stdout
+    assert "Applied 1 change(s)." in result.stdout
+    assert skill_path.read_text() == NEW_TICKET_SKILL
 
 
 def test_apply_plan_never_touches_user_files(tmp_path):
