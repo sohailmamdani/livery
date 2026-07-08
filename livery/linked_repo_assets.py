@@ -12,6 +12,12 @@ from pathlib import Path
 
 import frontmatter
 
+from .harness_assets import (
+    COMMAND_HARNESS_ASSETS,
+    render_command_skill,
+    render_command_slash,
+)
+
 
 LINKED_REPO_ENGINES = ("codex", "claude_code")
 
@@ -366,6 +372,15 @@ def install_linked_repo_assets(
                     force=force,
                 )
             )
+        for asset in COMMAND_HARNESS_ASSETS:
+            results.append(
+                _write_asset(
+                    engine="claude_code",
+                    path=repo_root / ".claude" / "commands" / f"{asset.skill_name}.md",
+                    content=render_command_slash(asset, linked_repo=True),
+                    force=force,
+                )
+            )
         for name, content in (
             ("livery-hello", LINKED_REPO_HELLO_SKILL),
             ("livery-list-agents", LINKED_REPO_LIST_AGENTS_SKILL),
@@ -378,6 +393,15 @@ def install_linked_repo_assets(
                     engine="claude_code",
                     path=repo_root / ".claude" / "skills" / name / "SKILL.md",
                     content=content,
+                    force=force,
+                )
+            )
+        for asset in COMMAND_HARNESS_ASSETS:
+            results.append(
+                _write_asset(
+                    engine="claude_code",
+                    path=repo_root / ".claude" / "skills" / asset.skill_name / "SKILL.md",
+                    content=render_command_skill(asset, linked_repo=True),
                     force=force,
                 )
             )
@@ -395,6 +419,15 @@ def install_linked_repo_assets(
                     engine="codex",
                     path=repo_root / ".agents" / "skills" / name / "SKILL.md",
                     content=content,
+                    force=force,
+                )
+            )
+        for asset in COMMAND_HARNESS_ASSETS:
+            results.append(
+                _write_asset(
+                    engine="codex",
+                    path=repo_root / ".agents" / "skills" / asset.skill_name / "SKILL.md",
+                    content=render_command_skill(asset, linked_repo=True),
                     force=force,
                 )
             )

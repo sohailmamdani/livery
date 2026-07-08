@@ -17,7 +17,10 @@ Git = audit log / sync layer
 Harness-facing assets should stay visibly Livery-owned. Shipped Codex and
 Claude skills use `livery-*` names, and Claude slash commands live under a
 `livery/` command group, so Livery does not occupy generic harness names such
-as `hello`, `ticket`, or `walkie`.
+as `hello`, `ticket`, or `walkie`. In addition to friendly aliases, Livery
+ships command-shaped skills for concrete CLI commands (`livery-ticket-list`,
+`livery-dispatch-status`, `livery-memory-search`, etc.) so harnesses can route
+ordinary user requests to the same JSON-backed CLI surface humans use.
 
 The markdown files are records, not the API. Harnesses can read them when that
 is useful, but normal mutations should go through Livery commands so IDs,

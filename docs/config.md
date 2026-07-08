@@ -181,7 +181,7 @@ For Claude Code, Livery writes:
 
 The startup brief tells the CoS whether the current directory is a workspace, linked repo, or legacy framework repo; includes concise workspace status; and instructs the CoS to acknowledge that Livery context to the user.
 
-When run from a linked repo, `livery install-agent-hooks` also installs a small linked-repo harness overlay beside the project code. Claude Code gets `/livery-hello`, `/livery-list-agents`, `/livery-new-ticket`, `/livery-talk-agent`, and `/livery-walkie-talkie`; Codex gets matching `livery-hello`, `livery-list-agents`, `livery-new-ticket`, `livery-talk-agent`, and `livery-walkie-talkie` skills. These are materially different from the parent-workspace entrypoints: they first confirm the repo link, then tell the harness that Livery agents, tickets, Talk transcripts, and Walkie-Talkie transcripts are resolved through the parent workspace while repo-local paths and branch context still matter.
+When run from a linked repo, `livery install-agent-hooks` also installs a small linked-repo harness overlay beside the project code. Claude Code gets `/livery-hello`, `/livery-list-agents`, `/livery-new-ticket`, `/livery-talk-agent`, `/livery-walkie-talkie`, plus command-shaped entries such as `/livery-ticket-list` and `/livery-dispatch-status`; Codex gets matching `livery-*` skills. These are materially different from the parent-workspace entrypoints: they first confirm the repo link, then tell the harness that Livery agents, tickets, Talk transcripts, Walkie-Talkies, and other workspace records are resolved through the parent workspace while repo-local paths and branch context still matter.
 
 To update a repo that was linked before this overlay existed, update Livery, `cd` into the linked repo, and run `livery install-agent-hooks` again. Livery updates managed linked-repo entrypoints and reports any user-written files it skipped.
 
@@ -306,12 +306,9 @@ The leading dot disambiguates them on disk and in `ls -la`; otherwise no overlap
 
 When `cos_engine` includes Codex, Livery scaffolds skills at `.agents/skills/<name>/SKILL.md` (Codex's convention). When `cos_engine` includes Claude Code, the same skills go to `.claude/skills/<name>/SKILL.md` plus grouped slash commands under `.claude/commands/livery/<command>.md`.
 
-Shipped skills today:
+Shipped skills include:
 
-- **`livery-hello`** — entry handshake for a new session. Runs `livery session-brief`, acknowledges the workspace or linked repo, then runs `livery status`.
-- **`livery-list-agents`** — lists hired agents by running `livery agents --format json`.
-- **`livery-new-ticket`** — helps turn user intent into a markdown ticket.
-- **`livery-talk-agent`** — asks a hired agent a direct advisory question with `livery talk`.
-- **`livery-walkie-talkie`** — starts or continues append-only AI-to-AI debate.
+- **Friendly aliases** for common harness flows: `livery-hello`, `livery-list-agents`, `livery-new-ticket`, `livery-talk-agent`, and `livery-walkie-talkie`.
+- **Command-shaped skills** for concrete CLI commands, named after the command path: `livery-ticket-list`, `livery-ticket-show`, `livery-dispatch-status`, `livery-memory-search`, `livery-walkie-list`, and so on. These make ordinary requests such as "list open tickets", "show closed tickets", "what dispatches are running?", or "search memory" discoverable inside Codex and Claude Code without memorizing CLI syntax.
 
 Both `SKILL.md` formats use the same frontmatter (`name`, `description`) and prose body, so the file content is identical between engines — only the discovery path differs.

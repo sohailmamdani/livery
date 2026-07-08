@@ -1626,7 +1626,7 @@ def link_repo(
     if excluded:
         typer.echo("Git exclude:      added .livery-link.toml to .git/info/exclude")
 
-    asset_results = install_linked_repo_assets(repo_root=repo_root)
+    asset_results = install_linked_repo_assets(repo_root=repo_root, force=force)
     if asset_results:
         typer.echo("Harness entries:")
         for r in asset_results:

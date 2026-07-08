@@ -344,9 +344,11 @@ def test_livery_link_command_writes_marker_and_git_exclude(tmp_path, monkeypatch
     assert (repo / ".agents" / "skills" / "livery-hello" / "SKILL.md").exists()
     assert (repo / ".agents" / "skills" / "livery-list-agents" / "SKILL.md").exists()
     assert (repo / ".agents" / "skills" / "livery-talk-agent" / "SKILL.md").exists()
+    assert (repo / ".agents" / "skills" / "livery-ticket-list" / "SKILL.md").exists()
     assert (repo / ".claude" / "commands" / "livery-list-agents.md").exists()
     assert (repo / ".claude" / "commands" / "livery-new-ticket.md").exists()
     assert (repo / ".claude" / "commands" / "livery-talk-agent.md").exists()
+    assert (repo / ".claude" / "commands" / "livery-dispatch-status.md").exists()
     assert "linked project repo" in (
         repo / ".agents" / "skills" / "livery-hello" / "SKILL.md"
     ).read_text()
@@ -356,10 +358,33 @@ def test_livery_link_command_writes_marker_and_git_exclude(tmp_path, monkeypatch
     assert "livery talk <agent-id>" in (
         repo / ".agents" / "skills" / "livery-talk-agent" / "SKILL.md"
     ).read_text()
+    assert "open and closed tickets" in (
+        repo / ".agents" / "skills" / "livery-ticket-list" / "SKILL.md"
+    ).read_text()
     assert "parent workspace" in (
         repo / ".claude" / "commands" / "livery-new-ticket.md"
     ).read_text()
     assert "Harness entries:" in result.stdout
+
+
+def test_livery_link_force_overwrites_user_linked_repo_entrypoint(tmp_path, monkeypatch):
+    workspace = _make_workspace(tmp_path)
+    repo = _make_repo(tmp_path)
+    skill = repo / ".agents" / "skills" / "livery-ticket-list" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("---\nname: livery-ticket-list\n---\ncustom instructions\n")
+
+    monkeypatch.chdir(repo)
+    result = CliRunner().invoke(
+        app,
+        ["link", str(workspace), "--repo-id", "api", "--force"],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    text = skill.read_text()
+    assert "custom instructions" not in text
+    assert "livery: managed" in text
+    assert "open and closed tickets" in text
 
 
 def test_livery_link_command_moves_existing_workspace(tmp_path, monkeypatch):

@@ -116,8 +116,9 @@ cd ~/code/my-project
 livery link ~/companies/my-first-company --repo-id my-project
 livery install-agent-hooks              # install linked-repo startup awareness here too
 # Also installs linked-repo Livery entrypoints:
-# Claude Code: /livery-hello, /livery-list-agents, /livery-new-ticket, /livery-talk-agent, /livery-walkie-talkie
-# Codex: livery-hello, livery-list-agents, livery-new-ticket, livery-talk-agent, livery-walkie-talkie skills
+# Claude Code: /livery-hello, /livery-list-agents, /livery-new-ticket, /livery-talk-agent,
+#              /livery-walkie-talkie, plus command-shaped entries like /livery-ticket-list
+# Codex: matching livery-* skills, including one skill per concrete livery command
 
 # If this repo was already initialized as a standalone workspace, migrate it
 # into the shared workspace while linking it.
@@ -178,26 +179,23 @@ my-workspace/
 ├── .claude/                                   # Claude Code's skill discovery dir
 │   ├── commands/livery/                       # grouped Livery slash commands
 │   │   ├── hello.md                           # Livery orientation command
-│   │   ├── agents.md                          # Livery agent inventory command
-│   │   ├── ticket.md                          # Livery ticket command
-│   │   ├── talk.md                            # Livery direct-agent talk command
-│   │   └── walkie.md                          # Livery walkie command
-│   └── skills/
+│   │   ├── ticket-list.md                     # command-shaped wrappers
+│   │   ├── dispatch-status.md
+│   │   └── ...
+│   └── skills/                                # livery-* skills, including one per CLI command
 │       ├── livery-hello/SKILL.md
-│       ├── livery-list-agents/SKILL.md
-│       ├── livery-new-ticket/SKILL.md
-│       ├── livery-talk-agent/SKILL.md
-│       └── livery-walkie-talkie/SKILL.md
+│       ├── livery-ticket-list/SKILL.md
+│       ├── livery-dispatch-status/SKILL.md
+│       └── ...
 └── .agents/                                   # Codex's skill discovery dir (.agents/skills)
     └── skills/
         ├── livery-hello/SKILL.md
-        ├── livery-list-agents/SKILL.md
-        ├── livery-new-ticket/SKILL.md
-        ├── livery-talk-agent/SKILL.md
-        └── livery-walkie-talkie/SKILL.md
+        ├── livery-ticket-list/SKILL.md
+        ├── livery-dispatch-status/SKILL.md
+        └── ...
 ```
 
-`CLAUDE.md` and `AGENTS.md` are the same content with different names — one for each engine's convention. Same with shipped skills: they live in `.claude/skills/` for Claude Code and `.agents/skills/` for Codex. Claude Code slash commands live under `.claude/commands/livery/` so they stay grouped as Livery commands. `--cos-engine claude_code` skips the `.agents/` directory; `--cos-engine codex` skips `.claude/`. `--cos-engine pi` and `--cos-engine opencode` scaffold their `AGENTS.md`-style convention files without Claude/Codex-specific skill directories.
+`CLAUDE.md` and `AGENTS.md` are the same content with different names — one for each engine's convention. Same with shipped skills: they live in `.claude/skills/` for Claude Code and `.agents/skills/` for Codex. Livery ships a few friendly aliases (`livery-hello`, `livery-new-ticket`, `livery-talk-agent`, etc.) plus command-shaped skills such as `livery-ticket-list`, `livery-dispatch-status`, and `livery-memory-search` so the harness can discover the CLI surface directly. Claude Code slash commands live under `.claude/commands/livery/` so they stay grouped as Livery commands. `--cos-engine claude_code` skips the `.agents/` directory; `--cos-engine codex` skips `.claude/`. `--cos-engine pi` and `--cos-engine opencode` scaffold their `AGENTS.md`-style convention files without Claude/Codex-specific skill directories.
 
 ## Configuration (`livery.toml`)
 

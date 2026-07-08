@@ -4,8 +4,12 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Added
+- Fresh and upgraded workspaces now get command-shaped harness skills for concrete `livery` commands, including ticket listing/showing/closing, dispatch status/tail, memory add/list/show/search, status, doctor, upgrade, sync, and Walkie-Talkie subcommands. Linked repos get matching parent-workspace-aware overlays.
+
 ### Fixed
 - `livery upgrade-workspace --apply --force` now actually overwrites customized shipped skill and slash-command files, and its output says those files will be overwritten instead of telling the user to pass `--force`.
+- `livery link --force` now passes the force flag through to linked-repo harness entrypoint installation, matching the command's skip warning.
 
 ## 0.18.0 — 2026-07-08
 

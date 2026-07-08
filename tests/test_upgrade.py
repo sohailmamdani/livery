@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from livery.cli import app
 from livery.cos_engines import MANAGED_BEGIN, MANAGED_END, wrap_managed
+from livery.harness_assets import render_command_skill, render_command_slash
 from livery.init import (
     COS_MANAGED_BLOCK,
     HELLO_SKILL,
@@ -220,6 +221,31 @@ def test_compute_plan_creates_missing_list_agents_assets(tmp_path):
     assert claude_skill_item.new_content == LIST_AGENTS_SKILL
     assert codex_skill_item.action == Action.CREATE
     assert codex_skill_item.new_content == LIST_AGENTS_SKILL
+
+
+def test_compute_plan_creates_missing_command_shaped_assets(tmp_path):
+    from livery.harness_assets import COMMAND_HARNESS_ASSETS
+
+    root = _fresh_workspace(tmp_path, cos_engine="both")
+    asset = next(a for a in COMMAND_HARNESS_ASSETS if a.skill_name == "livery-ticket-list")
+    command_path = root / ".claude" / "commands" / "livery" / asset.slash_file
+    claude_skill_path = root / ".claude" / "skills" / asset.skill_name / "SKILL.md"
+    codex_skill_path = root / ".agents" / "skills" / asset.skill_name / "SKILL.md"
+    command_path.unlink()
+    claude_skill_path.unlink()
+    codex_skill_path.unlink()
+
+    plan = compute_plan(root)
+    command_item = next(i for i in plan.items if i.path == command_path)
+    claude_skill_item = next(i for i in plan.items if i.path == claude_skill_path)
+    codex_skill_item = next(i for i in plan.items if i.path == codex_skill_path)
+
+    assert command_item.action == Action.CREATE
+    assert command_item.new_content == render_command_slash(asset)
+    assert claude_skill_item.action == Action.CREATE
+    assert claude_skill_item.new_content == render_command_skill(asset)
+    assert codex_skill_item.action == Action.CREATE
+    assert codex_skill_item.new_content == render_command_skill(asset)
 
 
 def test_compute_plan_creates_missing_talk_assets(tmp_path):

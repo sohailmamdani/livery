@@ -41,6 +41,11 @@ from .cos_engines import (
     resolve_engines,
     wrap_managed,
 )
+from .harness_assets import (
+    COMMAND_HARNESS_ASSETS,
+    render_command_skill,
+    render_command_slash,
+)
 
 # When a legacy workspace (no `cos_engines` field in livery.toml) is upgraded,
 # this is the engine list it migrates onto. "Full benefits" — every engine
@@ -316,49 +321,67 @@ def compute_plan(root: Path) -> UpgradePlan:
 
     for eid in engine_ids:
         engine = COS_ENGINES[eid]
+        planned_asset_paths: set[Path] = set()
+
+        def _append_skill_plan(path: Path, content: str) -> None:
+            if path in planned_asset_paths:
+                return
+            planned_asset_paths.add(path)
+            items.append(_plan_skill_file(path, content))
+
         if engine.commands_dir:
             command_group = root / engine.commands_dir / LIVERY_COMMAND_GROUP
-            items.append(_plan_skill_file(
+            _append_skill_plan(
                 command_group / "hello.md",
                 HELLO_SLASH,
-            ))
-            items.append(_plan_skill_file(
+            )
+            _append_skill_plan(
                 command_group / "agents.md",
                 LIST_AGENTS_SLASH,
-            ))
-            items.append(_plan_skill_file(
+            )
+            _append_skill_plan(
                 command_group / "ticket.md",
                 TICKET_SLASH,
-            ))
-            items.append(_plan_skill_file(
+            )
+            _append_skill_plan(
                 command_group / "talk.md",
                 TALK_SLASH,
-            ))
-            items.append(_plan_skill_file(
+            )
+            _append_skill_plan(
                 command_group / "walkie.md",
                 WALKIE_SLASH,
-            ))
+            )
+            for asset in COMMAND_HARNESS_ASSETS:
+                _append_skill_plan(
+                    command_group / asset.slash_file,
+                    render_command_slash(asset),
+                )
         if engine.skills_dir:
-            items.append(_plan_skill_file(
+            _append_skill_plan(
                 root / engine.skills_dir / LIVERY_HELLO_SKILL_NAME / "SKILL.md",
                 HELLO_SKILL,
-            ))
-            items.append(_plan_skill_file(
+            )
+            _append_skill_plan(
                 root / engine.skills_dir / LIVERY_LIST_AGENTS_SKILL_NAME / "SKILL.md",
                 LIST_AGENTS_SKILL,
-            ))
-            items.append(_plan_skill_file(
+            )
+            _append_skill_plan(
                 root / engine.skills_dir / LIVERY_NEW_TICKET_SKILL_NAME / "SKILL.md",
                 NEW_TICKET_SKILL,
-            ))
-            items.append(_plan_skill_file(
+            )
+            _append_skill_plan(
                 root / engine.skills_dir / LIVERY_TALK_SKILL_NAME / "SKILL.md",
                 TALK_SKILL,
-            ))
-            items.append(_plan_skill_file(
+            )
+            _append_skill_plan(
                 root / engine.skills_dir / LIVERY_WALKIE_SKILL_NAME / "SKILL.md",
                 WALKIE_SKILL,
-            ))
+            )
+            for asset in COMMAND_HARNESS_ASSETS:
+                _append_skill_plan(
+                    root / engine.skills_dir / asset.skill_name / "SKILL.md",
+                    render_command_skill(asset),
+                )
 
     items.extend(_plan_memory_scaffold(root))
 

@@ -10,6 +10,7 @@ from livery.init import (
     _render_livery_toml,
     init_workspace,
 )
+from livery.harness_assets import COMMAND_HARNESS_ASSETS
 
 
 def test_render_livery_toml_minimal():
@@ -87,6 +88,26 @@ def test_init_workspace_creates_standard_layout(tmp_path):
     assert Path(".agents/skills/livery-new-ticket/SKILL.md") in paths
     assert Path(".agents/skills/livery-talk-agent/SKILL.md") in paths
     assert Path(".agents/skills/livery-walkie-talkie/SKILL.md") in paths
+
+    for asset in COMMAND_HARNESS_ASSETS:
+        assert Path(".claude/skills") / asset.skill_name / "SKILL.md" in paths
+        assert Path(".agents/skills") / asset.skill_name / "SKILL.md" in paths
+        assert Path(".claude/commands/livery") / asset.slash_file in paths
+
+
+def test_init_workspace_installs_command_shaped_skill_content(tmp_path):
+    init_workspace(target=tmp_path / "ws", name="test-ws", description="desc")
+    target = tmp_path / "ws"
+
+    ticket_list = target / ".agents" / "skills" / "livery-ticket-list" / "SKILL.md"
+    dispatch_status = target / ".agents" / "skills" / "livery-dispatch-status" / "SKILL.md"
+    walkie_list = target / ".claude" / "commands" / "livery" / "walkie-list.md"
+
+    assert "name: livery-ticket-list" in ticket_list.read_text()
+    assert "open and closed tickets" in ticket_list.read_text()
+    assert "livery dispatch status" in dispatch_status.read_text()
+    assert "scheduled or prepared agent work status" in dispatch_status.read_text()
+    assert "livery walkie list" in walkie_list.read_text()
 
 
 def test_init_workspace_writes_default_runtime_and_telegram(tmp_path):

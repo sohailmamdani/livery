@@ -28,6 +28,11 @@ from .cos_engines import (
     resolve_engines,
     wrap_managed,
 )
+from .harness_assets import (
+    COMMAND_HARNESS_ASSETS,
+    render_command_skill,
+    render_command_slash,
+)
 from .memory import ensure_memory_scaffold
 
 
@@ -800,11 +805,21 @@ def init_workspace(
             _install_skill_file(command_group / "ticket.md", TICKET_SLASH)
             _install_skill_file(command_group / "talk.md", TALK_SLASH)
             _install_skill_file(command_group / "walkie.md", WALKIE_SLASH)
+            for asset in COMMAND_HARNESS_ASSETS:
+                _install_skill_file(
+                    command_group / asset.slash_file,
+                    render_command_slash(asset),
+                )
         if engine.skills_dir:
             _install_skill_file(target / engine.skills_dir / LIVERY_HELLO_SKILL_NAME / "SKILL.md", HELLO_SKILL)
             _install_skill_file(target / engine.skills_dir / LIVERY_LIST_AGENTS_SKILL_NAME / "SKILL.md", LIST_AGENTS_SKILL)
             _install_skill_file(target / engine.skills_dir / LIVERY_NEW_TICKET_SKILL_NAME / "SKILL.md", NEW_TICKET_SKILL)
             _install_skill_file(target / engine.skills_dir / LIVERY_TALK_SKILL_NAME / "SKILL.md", TALK_SKILL)
             _install_skill_file(target / engine.skills_dir / LIVERY_WALKIE_SKILL_NAME / "SKILL.md", WALKIE_SKILL)
+            for asset in COMMAND_HARNESS_ASSETS:
+                _install_skill_file(
+                    target / engine.skills_dir / asset.skill_name / "SKILL.md",
+                    render_command_skill(asset),
+                )
 
     return result
