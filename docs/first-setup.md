@@ -393,6 +393,13 @@ Either:
 
 You don't need *all* runtimes — one is enough.
 
+If LM Studio or Ollama shows `[warn]` with `http=blocked`, that is different
+from `FAIL`. It means the current harness process was not allowed to probe
+localhost, often because a sandbox blocked the check. Verify from a normal host
+shell with `curl http://localhost:1234/v1/models` for LM Studio or
+`curl http://localhost:11434/api/tags` for Ollama before assuming the runtime is
+down.
+
 ### `livery ticket close` fails on `git push`
 
 Check that the workspace has a git remote set. If you haven't pushed yet:

@@ -5,7 +5,9 @@ from unittest.mock import patch
 
 import frontmatter
 import pytest
+from typer.testing import CliRunner
 
+from livery.cli import app
 from livery.doctor import (
     RUNTIME_BINARIES,
     check_runtime,
@@ -75,6 +77,18 @@ def test_check_runtime_lm_studio_endpoint_down(fake_which_nothing, fake_http_all
     assert any("1234" in n for n in status.notes)
 
 
+def test_check_runtime_lm_studio_endpoint_probe_blocked(fake_which_nothing, monkeypatch):
+    import livery.doctor as doctor_mod
+
+    monkeypatch.setattr(doctor_mod, "_http_reachable", lambda *a, **kw: None)
+
+    status = check_runtime("lm_studio")
+    assert status.http_reachable is None
+    assert status.http_probe_blocked is True
+    assert status.ok is True
+    assert any("probe blocked" in n for n in status.notes)
+
+
 def test_check_runtime_ollama_either_binary_or_endpoint_sufficient(monkeypatch):
     import livery.doctor as doctor_mod
 
@@ -121,6 +135,30 @@ def test_http_reachable_uses_urllib_and_tolerates_http_errors():
 
     with patch("urllib.request.urlopen", side_effect=raise_url_error):
         assert _http_reachable("http://example/") is False
+
+    def raise_permission_error(*a, **kw):
+        raise urllib.error.URLError(PermissionError(1, "Operation not permitted"))
+
+    with patch("urllib.request.urlopen", side_effect=raise_permission_error):
+        assert _http_reachable("http://example/") is None
+
+
+def test_doctor_renders_blocked_http_probe_as_warning(
+    fake_which_nothing,
+    monkeypatch,
+    tmp_path,
+):
+    import livery.doctor as doctor_mod
+
+    monkeypatch.setattr(doctor_mod, "_http_reachable", lambda *a, **kw: None)
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["doctor"])
+
+    assert result.exit_code == 1, result.stdout + result.stderr
+    assert "[warn] lm_studio" in result.stdout
+    assert "http=blocked" in result.stdout
+    assert "probe blocked by this process" in result.stdout
 
 
 def _make_workspace(tmp_path: Path) -> Path:

@@ -19,6 +19,7 @@ import socket
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass, field
+from errno import EACCES, EPERM
 from pathlib import Path
 from typing import Optional
 
@@ -51,6 +52,7 @@ class RuntimeStatus:
     http_endpoint: Optional[str]
     http_reachable: Optional[bool]  # None if no HTTP check applies
     ok: bool
+    http_probe_blocked: bool = False
     notes: list[str] = field(default_factory=list)
 
 
@@ -88,11 +90,32 @@ class DoctorReport:
         }
 
 
-def _http_reachable(url: str, timeout: float = 1.5) -> bool:
-    """Return True if `url` responds with any HTTP status. Errors → False.
+def _is_permission_blocked_error(exc: BaseException) -> bool:
+    """True when the current process was not allowed to make the probe.
+
+    Codex/Claude sandbox layers can block localhost networking even when the
+    host-side service is running. That is different from connection refused:
+    it means this process cannot observe the endpoint either way.
+    """
+    if isinstance(exc, PermissionError):
+        return True
+    if isinstance(exc, OSError) and exc.errno in {EPERM, EACCES}:
+        return True
+    if isinstance(exc, urllib.error.URLError):
+        reason = exc.reason
+        if isinstance(reason, BaseException) and _is_permission_blocked_error(reason):
+            return True
+    return "Operation not permitted" in str(exc)
+
+
+def _http_reachable(url: str, timeout: float = 1.5) -> bool | None:
+    """Return True if `url` responds with any HTTP status.
 
     We don't care about the status code — a 200 OR a 401 both mean "something
     is listening." What we want to rule out is "nothing on this port."
+
+    Returns None when the probe itself is blocked by the current execution
+    environment, for example a CoS sandbox denying localhost networking.
     """
     try:
         with urllib.request.urlopen(url, timeout=timeout):  # noqa: S310
@@ -100,7 +123,9 @@ def _http_reachable(url: str, timeout: float = 1.5) -> bool:
     except urllib.error.HTTPError:
         # Got a response, even if it's an error — the server is up.
         return True
-    except (urllib.error.URLError, TimeoutError, socket.timeout, OSError):
+    except (urllib.error.URLError, TimeoutError, socket.timeout, OSError) as e:
+        if _is_permission_blocked_error(e):
+            return None
         return False
 
 
@@ -117,6 +142,7 @@ def check_runtime(runtime: str) -> RuntimeStatus:
             binary_path=None,
             http_endpoint=None,
             http_reachable=None,
+            http_probe_blocked=False,
             ok=False,
             notes=[f"unknown runtime '{runtime}'"],
         )
@@ -130,21 +156,28 @@ def check_runtime(runtime: str) -> RuntimeStatus:
             notes.append(f"`{binary}` not on PATH")
 
     http_reachable: Optional[bool] = None
+    http_probe_blocked = False
     if http_endpoint is not None:
         http_reachable = _http_reachable(http_endpoint)
-        if not http_reachable:
+        if http_reachable is False:
             notes.append(f"endpoint {http_endpoint} unreachable")
+        elif http_reachable is None:
+            http_probe_blocked = True
+            notes.append(
+                f"endpoint {http_endpoint} probe blocked by this process; "
+                "verify from the host shell if runtime health matters"
+            )
 
     # OK logic: if both a binary and an endpoint are expected, either is
     # sufficient (e.g. ollama's CLI means you *could* run it; a live endpoint
     # means it's already running). If only one check applies, that one must
     # pass.
     if binary is not None and http_endpoint is not None:
-        ok = binary_path is not None or bool(http_reachable)
+        ok = binary_path is not None or http_reachable is not False
     elif binary is not None:
         ok = binary_path is not None
     else:
-        ok = bool(http_reachable)
+        ok = http_reachable is not False
 
     return RuntimeStatus(
         runtime=runtime,
@@ -152,6 +185,7 @@ def check_runtime(runtime: str) -> RuntimeStatus:
         binary_path=binary_path,
         http_endpoint=http_endpoint,
         http_reachable=http_reachable,
+        http_probe_blocked=http_probe_blocked,
         ok=ok,
         notes=notes,
     )

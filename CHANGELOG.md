@@ -4,6 +4,9 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Fixed
+- `livery doctor` now treats sandbox-denied localhost HTTP probes as a warning (`http=blocked`) instead of reporting LM Studio or Ollama as down when the current harness process is not allowed to check the host service.
+
 ## 0.19.0 — 2026-07-08
 
 ### Added

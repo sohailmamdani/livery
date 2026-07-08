@@ -2277,14 +2277,18 @@ def doctor(
 
     typer.echo("Runtimes:")
     for r in report.runtimes:
-        status = "ok " if r.ok else "FAIL"
+        status = "warn" if r.http_probe_blocked else ("ok " if r.ok else "FAIL")
         bits: list[str] = []
         if r.binary_path:
             bits.append(f"bin={r.binary_path}")
         elif r.binary:
             bits.append(f"bin={r.binary} (not found)")
         if r.http_endpoint:
-            bits.append(f"http={'up' if r.http_reachable else 'down'}")
+            if r.http_probe_blocked:
+                http_status = "blocked"
+            else:
+                http_status = "up" if r.http_reachable else "down"
+            bits.append(f"http={http_status}")
         detail = ", ".join(bits)
         typer.echo(f"  [{status}] {r.runtime:<12} {detail}")
         for note in r.notes:
