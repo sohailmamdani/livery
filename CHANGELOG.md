@@ -4,6 +4,15 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.18.0 — 2026-07-08
+
+### Added
+- `livery talk <agent-id> "..."` starts a direct advisory exchange with a hired agent without leaving the current harness. Talk sessions append operator and agent messages to `talk/<session>.md`, support `--session`, `list`, `show`, and `--format json`, and keep runtime prompt/output files in ignored runtime state.
+- Fresh and upgraded workspaces now get managed `livery-talk-agent` harness assets for Claude Code and Codex. Linked repos get matching overlays that make clear Talk transcripts belong to the parent workspace.
+
+### Changed
+- Talk runtime commands intentionally omit the unattended-dispatch bypass flags used by ticket dispatch. The Talk prompt tells agents not to modify files or run implementation workflows; state-changing work should still become a ticket and explicit dispatch.
+
 ## 0.17.0 — 2026-07-03
 
 ### Added
