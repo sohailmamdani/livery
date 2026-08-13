@@ -4,6 +4,8 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.20.0 — 2026-08-13
+
 ### Added
 - Portable git-tracked schedules under `schedules/`, with calendar, interval, and one-shot triggers; explicit overlap and missed-run policies; and `new`, `list`, `install`, `sync`, `run`, `status`, `logs`, `enable`, `disable`, and `uninstall` commands.
 - Native per-user scheduling adapters: LaunchAgents with `StartCalendarInterval`/`StartInterval` on macOS and `systemd --user` services/timers on Linux. Installation is explicit and requires no Livery daemon, crontab edit, or root access.
