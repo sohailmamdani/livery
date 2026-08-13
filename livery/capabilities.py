@@ -127,6 +127,21 @@ CAPABILITIES: tuple[Capability, ...] = (
         agent_note="Read dispatch output before summarizing delegated work back to the user.",
     ),
     Capability(
+        id="scheduling",
+        group="Coordinate agents",
+        title="Schedule unattended agent work",
+        summary="Keep portable schedule definitions in git and install native user-level jobs on macOS or Linux.",
+        commands=(
+            "livery schedule new <id> --agent <agent> --weekdays 18:00",
+            "livery schedule install <id>",
+            "livery schedule list --format json",
+            "livery schedule status <id> --format json",
+            "livery schedule run <id> --now",
+        ),
+        when="Use for recurring or future unattended work that should survive terminal sessions and machine restarts.",
+        agent_note="Definitions are portable and tracked; installation is explicit, host-local, and uses launchd or systemd --user.",
+    ),
+    Capability(
         id="talk",
         group="Coordinate agents",
         title="Talk directly with a hired agent",

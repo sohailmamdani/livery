@@ -176,6 +176,14 @@ class DispatchAttempt:
     summary_excerpt: list[str]
     hooks: dict[str, HookOutcome | None]
     hook_warnings: list[str]
+    schedule_id: str | None = None
+    """Schedule that triggered this attempt, or None for ordinary dispatches."""
+
+    scheduled_for: str | None = None
+    """Logical occurrence timestamp for scheduled work, when applicable."""
+
+    trigger: str | None = None
+    """Dispatch origin such as ``schedule`` or ``manual``; optional/additive."""
 
     def to_json_dict(self) -> dict[str, Any]:
         """Convert to the JSON-friendly dict written to disk."""
@@ -232,6 +240,9 @@ class DispatchAttempt:
             summary_excerpt=list(d.get("summary_excerpt") or []),
             hooks=hooks,
             hook_warnings=list(d.get("hook_warnings") or []),
+            schedule_id=d.get("schedule_id"),
+            scheduled_for=d.get("scheduled_for"),
+            trigger=d.get("trigger"),
         )
 
 
@@ -245,18 +256,34 @@ def attempts_dir(workspace_root: Path) -> Path:
     return workspace_root / ".livery" / "dispatch" / "attempts"
 
 
+def ensure_runtime_gitignore(workspace_root: Path) -> Path:
+    """Ensure host/runtime state below ``.livery`` stays out of git.
+
+    Add missing framework-owned directory patterns without replacing any
+    operator additions already present in the nested gitignore.
+    """
+    livery_dir = workspace_root / ".livery"
+    livery_dir.mkdir(parents=True, exist_ok=True)
+    gitignore = livery_dir / ".gitignore"
+    existing = gitignore.read_text() if gitignore.exists() else "# Livery runtime state. Not for git.\n"
+    lines = existing.splitlines()
+    changed = False
+    for pattern in ("dispatch/", "logs/", "schedules/"):
+        if pattern not in lines:
+            lines.append(pattern)
+            changed = True
+    if changed or not gitignore.exists():
+        gitignore.write_text("\n".join(lines).rstrip() + "\n")
+    return livery_dir
+
+
 def ensure_attempts_dir(workspace_root: Path) -> Path:
     """Create the attempts directory plus the `.livery/.gitignore` if missing.
 
     The .gitignore tells git not to track runtime state (the attempts
     themselves, plus future hook log files). Idempotent — safe to call
     on every dispatch."""
-    livery_dir = workspace_root / ".livery"
-    livery_dir.mkdir(parents=True, exist_ok=True)
-
-    gitignore = livery_dir / ".gitignore"
-    if not gitignore.exists():
-        gitignore.write_text("# Livery runtime state. Not for git.\ndispatch/\nlogs/\n")
+    ensure_runtime_gitignore(workspace_root)
 
     target = attempts_dir(workspace_root)
     target.mkdir(parents=True, exist_ok=True)

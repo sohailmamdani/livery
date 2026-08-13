@@ -19,6 +19,7 @@ def test_capabilities_text_lists_feature_groups():
     assert "livery next --format json" in result.stdout
     assert "livery agents --format json" in result.stdout
     assert "livery memory search <query>" in result.stdout
+    assert "livery schedule install <id>" in result.stdout
     assert "livery install-agent-hooks" in result.stdout
     assert "livery telegram register-commands" in result.stdout
 
@@ -32,6 +33,7 @@ def test_capabilities_json_is_agent_readable():
     assert "discover" in ids
     assert "linked-repos" in ids
     assert "memory" in ids
+    assert "scheduling" in ids
     assert all("agent_note" in item for item in parsed["capabilities"])
 
 

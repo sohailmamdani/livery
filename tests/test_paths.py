@@ -38,6 +38,8 @@ def _make_in_repo_workspace(tmp_path: Path) -> Path:
     (repo / "tickets").mkdir()
     (repo / "tickets" / ".gitkeep").write_text("")
     (repo / "tickets" / "2026-05-15-001-fix-auth.md").write_text("ticket\n")
+    (repo / "schedules").mkdir()
+    (repo / "schedules" / "daily.md").write_text("schedule\n")
     (repo / "agents" / "dev").mkdir(parents=True)
     (repo / "agents" / "dev" / "agent.md").write_text("---\nid: dev\n---\n")
     (repo / "CLAUDE.md").write_text("# Repo CoS\n")
@@ -408,6 +410,7 @@ def test_livery_link_command_moves_existing_workspace(tmp_path, monkeypatch):
     assert not (repo / "livery.toml").exists()
     assert (repo / LINK_MARKER).exists()
     assert (workspace / "tickets" / "2026-05-15-001-fix-auth.md").exists()
+    assert (workspace / "schedules" / "daily.md").exists()
     assert (workspace / ".livery" / "linked-repos" / "api" / "livery.toml").exists()
 
 

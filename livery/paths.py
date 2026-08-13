@@ -31,6 +31,7 @@ LINK_MARKER = ".livery-link.toml"
 WORKSPACE_ARTIFACTS = (
     "agents",
     "tickets",
+    "schedules",
     ".livery",
     ".claude",
     ".agents",

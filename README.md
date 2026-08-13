@@ -18,6 +18,7 @@ Tech-savvy operators (not necessarily programmers) who want an AI workforce on t
 - **Workspace memory** for durable decisions, lessons, and preferences as git-tracked markdown.
 - **Runtime adapters** so agents can live on different stacks: Claude Code CLI, Codex CLI, Cursor, LM Studio, Ollama. Adding a new adapter is ~30 lines of Python.
 - **Durable dispatch attempts** under `.livery/dispatch/attempts/`, with status, PID, failures, hook outcomes, prompt path, and output path recorded per run.
+- **Portable schedules** tracked as markdown, installed explicitly as user-level `launchd` jobs on macOS or `systemd` timers on Linux.
 - **Talk** for direct advisory conversations with a hired agent from your current harness, backed by append-only transcripts.
 - **Walkie-Talkie** for structured AI-to-AI debate, either manual append-only transcripts or automated alternating dispatches between two hired agents.
 - **Discoverability commands, startup hooks, and a Livery hello skill** so CoS sessions can ask Livery what applies from the current directory instead of guessing from stale docs.
@@ -173,9 +174,10 @@ my-workspace/
 │   ├── decisions/
 │   ├── lessons/
 │   └── preferences/
+├── schedules/                                 # git-tracked recurring and one-shot agent tasks
 ├── talk/                                      # append-only operator-to-agent transcripts, created on first use
 ├── walkie-talkie/                             # append-only AI-to-AI debate transcripts, created on first use
-├── .livery/                                   # ignored runtime state: dispatch attempts, hook logs, talk/walkie prompts
+├── .livery/                                   # ignored runtime state: attempts, hooks, schedule runs/install receipts
 ├── .claude/                                   # Claude Code's skill discovery dir
 │   ├── commands/livery/                       # grouped Livery slash commands
 │   │   ├── hello.md                           # Livery orientation command
@@ -297,6 +299,43 @@ livery dispatch tail <query> -f           # follow (tail -f)
 ```
 
 `status` reads workspace attempt JSON first, then falls back to scanning `/tmp/livery-dispatch-*.out` for old or manually launched commands. Attempt-backed dispatches show richer lifecycle states: **prepared**, **running**, **succeeded**, **failed**, **blocked**, **stale**, **cancelled**, or **unknown**. For old/manual outputs with no attempt record, Livery still uses the legacy **done**, **active**, and **stale** classification.
+
+## Scheduling
+
+Schedule definitions are portable, git-tracked markdown under `schedules/`.
+Activation is deliberately separate and host-local: macOS uses a per-user
+LaunchAgent; Linux uses a `systemd --user` service and timer. Livery does not
+run a resident scheduler daemon and does not edit crontab.
+
+```sh
+livery schedule new evening-brief \
+  --agent evening-brief \
+  --weekdays 18:00 \
+  --task "Produce and verify the Evening Brief."
+
+livery schedule install evening-brief --dry-run  # inspect exact host files + command
+livery schedule install evening-brief            # install and enable
+livery schedule list
+livery schedule status evening-brief
+livery schedule run evening-brief --now           # explicit manual run
+livery schedule logs evening-brief
+livery schedule disable evening-brief
+livery schedule enable evening-brief
+livery schedule uninstall evening-brief           # keeps schedules/evening-brief.md
+```
+
+Every fire is a managed dispatch with a unique prompt/output directory and a
+normal durable attempt record. Scheduled attempts add `schedule_id`,
+`scheduled_for`, and `trigger` fields, so `livery dispatch status` sees them
+alongside ordinary work. The default policies are `overlap: skip` and
+`missed_run: once`; only one missed calendar occurrence is caught up.
+
+Supported portable triggers are one-shot RFC 3339 timestamps, daily/weekday/
+weekly local calendar times, and fixed intervals. Interval timers measure time
+while the native user scheduler is active and do not replay missed intervals.
+Calendar definitions use the machine's local timezone. See
+[`docs/scheduling.md`](docs/scheduling.md) for the file format, sleep/offline
+semantics, Linux linger notes, and native file locations.
 
 ## Memory
 

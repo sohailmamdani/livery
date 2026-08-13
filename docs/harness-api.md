@@ -52,6 +52,11 @@ livery dispatch prep <ticket-id> --worktree --format json
 livery dispatch fan-out <ticket-id> --to a,b --format json
 livery dispatch status --format json
 livery dispatch tail <query> --format json
+livery schedule new <id> --agent <id> --weekdays 18:00 --task "..." --format json
+livery schedule list --format json
+livery schedule install <id> --dry-run --format json
+livery schedule status <id> --format json
+livery schedule run <id> --now --format json
 ```
 
 The JSON shape is the contract harness integrations should parse. Text output

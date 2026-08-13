@@ -91,11 +91,13 @@ dispatch_app = typer.Typer(no_args_is_help=True, help="Dispatch tickets to regis
 telegram_app = typer.Typer(no_args_is_help=True, help="Manage Telegram bot integration")
 walkie_app = typer.Typer(no_args_is_help=True, help="Walkie-Talkie: turn-based debate between two AI sessions")
 memory_app = typer.Typer(no_args_is_help=True, help="Manage workspace memory")
+schedule_app = typer.Typer(no_args_is_help=True, help="Schedule recurring or one-shot agent work")
 app.add_typer(ticket_app, name="ticket")
 app.add_typer(dispatch_app, name="dispatch")
 app.add_typer(telegram_app, name="telegram")
 app.add_typer(walkie_app, name="walkie")
 app.add_typer(memory_app, name="memory")
+app.add_typer(schedule_app, name="schedule")
 
 
 @app.callback()
@@ -927,6 +929,359 @@ def ticket_close(
         })
         return
     typer.echo(f"{past.capitalize()}: {rel}")
+
+
+@schedule_app.command("new")
+def schedule_new(
+    schedule_id: str = typer.Argument(..., help="Stable lowercase schedule id"),
+    agent: str = typer.Option(..., "--agent", help="Hired agent id to run"),
+    task: str = typer.Option(
+        "Describe the scheduled task here.",
+        "--task",
+        help="Task instructions; edit schedules/<id>.md for longer instructions",
+    ),
+    daily: Optional[str] = typer.Option(None, "--daily", help="Run daily at HH:MM"),
+    weekdays: Optional[str] = typer.Option(None, "--weekdays", help="Run Monday-Friday at HH:MM"),
+    weekly: Optional[str] = typer.Option(None, "--weekly", help="Run weekly on mon..sun; use with --time"),
+    time_value: Optional[str] = typer.Option(None, "--time", help="HH:MM for --weekly"),
+    every: Optional[str] = typer.Option(None, "--every", help="Interval such as 30m, 2h, or 1d"),
+    at: Optional[str] = typer.Option(None, "--at", help="One-shot RFC 3339 timestamp with timezone"),
+    overlap: str = typer.Option("skip", "--overlap", help="Overlap policy: skip or allow"),
+    missed_run: str = typer.Option("once", "--missed-run", help="Missed occurrence policy: once or skip"),
+    worktree: bool = typer.Option(False, "--worktree", help="Create a unique worktree for each run"),
+    output_format: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+) -> None:
+    """Create a git-tracked portable schedule definition."""
+    from .schedule import DAY_NAMES, create_schedule, parse_duration
+
+    output_format = _validate_output_format(output_format)
+    root = find_root()
+    if not (root / "agents" / agent / "agent.md").is_file():
+        typer.echo(f"Agent '{agent}' not found in {root / 'agents' / agent}.", err=True)
+        raise typer.Exit(1)
+    triggers = [daily is not None, weekdays is not None, weekly is not None, every is not None, at is not None]
+    if sum(triggers) != 1:
+        typer.echo("Choose exactly one trigger: --daily, --weekdays, --weekly, --every, or --at.", err=True)
+        raise typer.Exit(1)
+    if overlap not in {"skip", "allow"}:
+        typer.echo("--overlap must be one of: skip, allow", err=True)
+        raise typer.Exit(1)
+    if missed_run not in {"once", "skip"}:
+        typer.echo("--missed-run must be one of: once, skip", err=True)
+        raise typer.Exit(1)
+
+    kind: str
+    schedule_time: str | None = None
+    days: tuple[str, ...] = ()
+    interval_seconds: int | None = None
+    if daily is not None:
+        kind, schedule_time, days = "calendar", daily, DAY_NAMES
+    elif weekdays is not None:
+        kind, schedule_time, days = "calendar", weekdays, DAY_NAMES[:5]
+    elif weekly is not None:
+        day = weekly.lower()[:3]
+        if day not in DAY_NAMES or not time_value:
+            typer.echo("--weekly requires mon..sun and --time HH:MM", err=True)
+            raise typer.Exit(1)
+        kind, schedule_time, days = "calendar", time_value, (day,)
+    elif every is not None:
+        kind = "interval"
+        try:
+            interval_seconds = parse_duration(every)
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(1)
+    else:
+        kind = "once"
+
+    try:
+        path = create_schedule(
+            workspace_root=root,
+            schedule_id=schedule_id,
+            assignee=agent,
+            task=task,
+            kind=kind,
+            time_value=schedule_time,
+            days=days,
+            interval_seconds=interval_seconds,
+            at=at,
+            overlap=overlap,
+            missed_run=missed_run,
+            worktree=worktree,
+        )
+    except (ValueError, FileExistsError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    if output_format == "json":
+        from .schedule import load_schedule
+
+        _echo_json({"schedule": load_schedule(path).to_dict()})
+        return
+    typer.echo(f"Created {path.relative_to(root)}")
+    typer.echo(f"Review the task, then run: livery schedule install {schedule_id}")
+
+
+@schedule_app.command("list")
+def schedule_list(
+    output_format: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+) -> None:
+    """List portable schedule definitions and host installation state."""
+    from .schedule import list_schedules, schedule_state
+    from .schedule_backends import load_installation
+
+    output_format = _validate_output_format(output_format)
+    root = find_root()
+    schedules = list_schedules(root)
+    rows = []
+    for definition in schedules:
+        installation = load_installation(root, definition.id)
+        rows.append(
+            {
+                **definition.to_dict(),
+                "installation": installation.to_dict() if installation else None,
+                "state": schedule_state(root, definition.id),
+            }
+        )
+    if output_format == "json":
+        _echo_json({"workspace_root": str(root), "schedules": rows})
+        return
+    if not rows:
+        typer.echo("No schedules. Create one with `livery schedule new`.")
+        return
+    for row in rows:
+        trigger = row["trigger"]
+        installed = row["installation"]
+        state = row["state"]
+        if trigger["kind"] == "calendar":
+            timing = f"{','.join(trigger['days'])} {trigger['time']}"
+        elif trigger["kind"] == "interval":
+            timing = f"every {trigger['interval_seconds']}s"
+        else:
+            timing = str(trigger["at"])
+        status = "installed" if installed else "not installed"
+        last = f", last={state.get('last_exit_code')}" if state.get("last_finished_at") else ""
+        typer.echo(f"{row['id']}: {timing} → {row['assignee']} [{status}{last}]")
+
+
+@schedule_app.command("install")
+def schedule_install(
+    query: str = typer.Argument(..., help="Schedule id or unique fragment"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview native files and command without installing"),
+    output_format: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+) -> None:
+    """Install or update a schedule in the native user-level scheduler."""
+    from .schedule import find_schedule
+    from .schedule_backends import format_command, install_schedule, preview_installation
+
+    output_format = _validate_output_format(output_format)
+    root = find_root()
+    try:
+        definition = find_schedule(root, query)
+        preview = preview_installation(definition, workspace_root=root)
+        installation = preview if dry_run else install_schedule(definition, workspace_root=root)
+    except (ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    payload = {**installation.to_dict(), "dry_run": dry_run}
+    if output_format == "json":
+        _echo_json({"installation": payload})
+        return
+    typer.echo(f"backend: {installation.backend}")
+    typer.echo(f"identity: {installation.identity}")
+    typer.echo(f"command: {format_command(installation.command)}")
+    for path in installation.files:
+        typer.echo(f"file: {path}")
+    typer.echo("Preview only; no host state changed." if dry_run else "Installed and enabled.")
+
+
+@schedule_app.command("run")
+def schedule_run_command(
+    query: str = typer.Argument(..., help="Schedule id or unique fragment"),
+    workspace: Optional[Path] = typer.Option(None, "--workspace", help="Explicit workspace root for native schedulers"),
+    now: bool = typer.Option(False, "--now", help="Run manually, bypassing occurrence deduplication"),
+    output_format: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+) -> None:
+    """Execute one schedule through the managed dispatch lifecycle."""
+    from dataclasses import asdict
+
+    from .schedule import find_schedule, run_schedule
+
+    output_format = _validate_output_format(output_format)
+    root = workspace.expanduser().resolve() if workspace else find_root()
+    if not (root / "livery.toml").is_file():
+        typer.echo(f"Not a Livery workspace: {root}", err=True)
+        raise typer.Exit(1)
+    try:
+        result = run_schedule(
+            workspace_root=root,
+            definition=find_schedule(root, query),
+            manual=now,
+        )
+    except (ValueError, RuntimeError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    payload = asdict(result)
+    if output_format == "json":
+        _echo_json({"run": payload})
+    else:
+        typer.echo(f"{result.schedule_id}: {result.outcome}")
+        if result.attempt_id:
+            typer.echo(f"attempt: {result.attempt_id}")
+            typer.echo(f"output: {result.output_path}")
+    if result.exit_code != 0:
+        raise typer.Exit(result.exit_code)
+
+
+@schedule_app.command("status")
+def schedule_status_command(
+    query: str = typer.Argument(..., help="Schedule id or unique fragment"),
+    output_format: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+) -> None:
+    """Inspect portable, runtime, and native scheduler state."""
+    from .schedule import find_schedule, schedule_state
+    from .schedule_backends import load_installation, native_status
+
+    output_format = _validate_output_format(output_format)
+    root = find_root()
+    try:
+        definition = find_schedule(root, query)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    installation = load_installation(root, definition.id)
+    native = native_status(installation) if installation else None
+    payload = {
+        "schedule": definition.to_dict(),
+        "installation": installation.to_dict() if installation else None,
+        "native": native,
+        "state": schedule_state(root, definition.id),
+    }
+    if output_format == "json":
+        _echo_json(payload)
+        return
+    typer.echo(f"schedule: {definition.id}")
+    typer.echo(f"agent: {definition.assignee}")
+    typer.echo(f"installed: {'yes' if installation else 'no'}")
+    if installation:
+        typer.echo(f"backend: {installation.backend}")
+        typer.echo(f"loaded: {'yes' if native and native.get('loaded') else 'no'}")
+    state = payload["state"]
+    typer.echo(f"last attempt: {state.get('last_attempt_id', '(none)')}")
+    typer.echo(f"last exit: {state.get('last_exit_code', '(none)')}")
+
+
+def _require_installation(root: Path, query: str):
+    from .schedule import find_schedule
+    from .schedule_backends import load_installation
+
+    definition = find_schedule(root, query)
+    installation = load_installation(root, definition.id)
+    if installation is None:
+        raise ValueError(f"schedule {definition.id} is not installed on this host")
+    return definition, installation
+
+
+@schedule_app.command("enable")
+def schedule_enable(query: str = typer.Argument(...)) -> None:
+    """Enable and load an installed native schedule."""
+    from .schedule_backends import set_schedule_enabled
+
+    root = find_root()
+    try:
+        definition, installation = _require_installation(root, query)
+        set_schedule_enabled(installation, enabled=True)
+    except (ValueError, subprocess.CalledProcessError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    typer.echo(f"Enabled {definition.id}.")
+
+
+@schedule_app.command("disable")
+def schedule_disable(query: str = typer.Argument(...)) -> None:
+    """Disable an installed native schedule without deleting its files."""
+    from .schedule_backends import set_schedule_enabled
+
+    root = find_root()
+    try:
+        definition, installation = _require_installation(root, query)
+        set_schedule_enabled(installation, enabled=False)
+    except (ValueError, subprocess.CalledProcessError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    typer.echo(f"Disabled {definition.id}.")
+
+
+@schedule_app.command("uninstall")
+def schedule_uninstall(query: str = typer.Argument(...)) -> None:
+    """Remove one schedule's native registration; keep its tracked definition."""
+    from .schedule_backends import uninstall_schedule
+
+    root = find_root()
+    try:
+        definition, installation = _require_installation(root, query)
+        uninstall_schedule(installation, workspace_root=root)
+    except (ValueError, subprocess.CalledProcessError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    typer.echo(f"Uninstalled {definition.id}; kept {definition.path.relative_to(root)}.")
+
+
+@schedule_app.command("sync")
+def schedule_sync(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview without changing host state"),
+    output_format: str = typer.Option("text", "--format", "-f", help="Output format: text or json"),
+) -> None:
+    """Install or refresh every tracked schedule; never remove orphaned jobs."""
+    from .schedule import list_schedules
+    from .schedule_backends import install_schedule, preview_installation
+
+    output_format = _validate_output_format(output_format)
+    root = find_root()
+    installations = []
+    try:
+        for definition in list_schedules(root):
+            item = (
+                preview_installation(definition, workspace_root=root)
+                if dry_run
+                else install_schedule(definition, workspace_root=root)
+            )
+            installations.append(item.to_dict())
+    except (RuntimeError, subprocess.CalledProcessError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    if output_format == "json":
+        _echo_json({"dry_run": dry_run, "installations": installations})
+        return
+    if not installations:
+        typer.echo("No tracked schedules to sync.")
+    else:
+        typer.echo(f"{'Would install' if dry_run else 'Installed'} {len(installations)} schedule(s).")
+
+
+@schedule_app.command("logs")
+def schedule_logs(
+    query: str = typer.Argument(...),
+    lines: int = typer.Option(40, "--lines", "-n", min=1, max=1000),
+) -> None:
+    """Print the tail of the latest scheduled dispatch output."""
+    from .schedule import find_schedule, schedule_state
+
+    root = find_root()
+    try:
+        definition = find_schedule(root, query)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    output_raw = schedule_state(root, definition.id).get("last_output_path")
+    if not output_raw or not Path(str(output_raw)).is_file():
+        typer.echo(f"Schedule {definition.id} has no run output yet.", err=True)
+        raise typer.Exit(1)
+    result = subprocess.run(
+        ["tail", "-n", str(lines), str(output_raw)],
+        capture_output=True,
+        text=True,
+    )
+    typer.echo(result.stdout, nl=False)
 
 
 @dispatch_app.command("prep")

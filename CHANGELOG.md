@@ -4,6 +4,13 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Added
+- Portable git-tracked schedules under `schedules/`, with calendar, interval, and one-shot triggers; explicit overlap and missed-run policies; and `new`, `list`, `install`, `sync`, `run`, `status`, `logs`, `enable`, `disable`, and `uninstall` commands.
+- Native per-user scheduling adapters: LaunchAgents with `StartCalendarInterval`/`StartInterval` on macOS and `systemd --user` services/timers on Linux. Installation is explicit and requires no Livery daemon, crontab edit, or root access.
+- Managed single-dispatch execution for scheduled work, including dispatch hooks, durable lifecycle transitions, unique per-run prompt/output paths, overlap locking, missed-occurrence deduplication, and schedule runtime receipts under `.livery/schedules/`.
+- Scheduled dispatch attempts now carry additive `schedule_id`, `scheduled_for`, and `trigger` fields and remain visible through ordinary dispatch status commands.
+- Fresh and upgraded workspaces receive a git-tracked `schedules/` scaffold. Scheduling commands are included in capability discovery and the JSON harness API documentation.
+
 ## 0.19.1 — 2026-07-08
 
 ### Fixed

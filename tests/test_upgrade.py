@@ -311,6 +311,19 @@ def test_apply_plan_backfills_memory_scaffold_idempotently(tmp_path):
     assert all(i.action != Action.CREATE for i in compute_plan(root).items)
 
 
+def test_compute_plan_creates_missing_schedule_scaffold(tmp_path):
+    root = _fresh_workspace(tmp_path, cos_engine="claude_code")
+    path = root / "schedules" / ".gitkeep"
+    path.unlink()
+
+    plan = compute_plan(root)
+    item = next(i for i in plan.items if i.path == path)
+
+    assert item.action == Action.CREATE
+    apply_plan(plan)
+    assert path.exists()
+
+
 def test_upgrade_workspace_dry_run_reports_missing_memory_scaffold(tmp_path, monkeypatch):
     root = _fresh_workspace(tmp_path, cos_engine="claude_code")
     rmtree(root / "memory")

@@ -25,6 +25,7 @@ The framework-managed parts are:
   `livery.toml`'s `cos_engines` — added when missing.
 - The `memory/` directory skeleton (`decisions`, `lessons`,
   `preferences`) — added when missing and otherwise left alone.
+- The git-tracked `schedules/` directory sentinel — added when missing.
 """
 
 from __future__ import annotations
@@ -301,6 +302,20 @@ def _plan_memory_scaffold(root: Path) -> list[PlanItem]:
     return items
 
 
+def _plan_schedule_scaffold(root: Path) -> list[PlanItem]:
+    path = root / "schedules" / ".gitkeep"
+    if path.exists():
+        return []
+    return [
+        PlanItem(
+            path=path,
+            action=Action.CREATE,
+            reason="schedule scaffold missing — will create git-tracked schedules directory",
+            new_content="",
+        )
+    ]
+
+
 def compute_plan(root: Path) -> UpgradePlan:
     """Build the full upgrade plan for `root`. Pure: no file writes."""
     engine_ids, name, description, is_legacy = _read_workspace_meta(root)
@@ -384,6 +399,7 @@ def compute_plan(root: Path) -> UpgradePlan:
                 )
 
     items.extend(_plan_memory_scaffold(root))
+    items.extend(_plan_schedule_scaffold(root))
 
     return UpgradePlan(workspace_root=root, cos_engines=engine_ids, items=items)
 

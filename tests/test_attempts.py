@@ -117,6 +117,7 @@ def test_ensure_attempts_dir_creates_layout(tmp_path):
     gitignore = tmp_path / ".livery" / ".gitignore"
     assert gitignore.is_file()
     assert "dispatch/" in gitignore.read_text()
+    assert "schedules/" in gitignore.read_text()
 
 
 def test_ensure_attempts_dir_idempotent(tmp_path):
@@ -127,6 +128,7 @@ def test_ensure_attempts_dir_idempotent(tmp_path):
     ensure_attempts_dir(tmp_path)
     # Still has user's customization
     assert "custom-line" in gitignore.read_text()
+    assert "schedules/" in gitignore.read_text()
 
 
 def test_write_and_load_attempt_roundtrip(tmp_path):

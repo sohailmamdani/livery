@@ -169,7 +169,7 @@ you, not the intern-compliance version.
   turn state-changing work into a ticket and dispatch it explicitly.
 - When acting programmatically or advising another agent, prefer structured
   output: `livery next --format json`, `livery capabilities --format json`,
-  and `--format json` on agents, ticket, memory, dispatch, where, and
+  and `--format json` on agents, ticket, memory, dispatch, schedule, where, and
   status commands. Parse JSON instead of scraping human-readable text.
 - If Livery-managed SessionStart hooks are installed, read the injected
   `livery session-brief` carefully. It tells you whether the current directory
@@ -185,6 +185,15 @@ prepares dispatch (`livery dispatch prep <ticket> --worktree`) to a hired
 agent, the agent runs and reports back via a `=== DISPATCH_SUMMARY ===`
 block, you (or the CoS) close the ticket (`livery ticket close <id>
 --summary`). Worktrees keep agents from stepping on your in-progress work.
+
+## Scheduling
+
+- Scheduled agent tasks are git-tracked markdown under `schedules/`.
+- Creating or pulling a definition does not activate it. Use
+  `livery schedule install <id>` for explicit host-local installation.
+- Inspect scheduled work with `livery schedule list --format json`,
+  `livery schedule status <id> --format json`, and ordinary
+  `livery dispatch status --format json` attempt records.
 """
 
 # The user-editable section that appears *below* the managed block in a
@@ -739,6 +748,7 @@ def init_workspace(
 
     _write_fresh(target / "agents" / ".gitkeep", "")
     _write_fresh(target / "tickets" / ".gitkeep", "")
+    _write_fresh(target / "schedules" / ".gitkeep", "")
     result.created.extend(ensure_memory_scaffold(target))
 
     # Engine-specific skill / command assets. For each target path:
