@@ -347,10 +347,12 @@ def test_livery_link_command_writes_marker_and_git_exclude(tmp_path, monkeypatch
     assert (repo / ".agents" / "skills" / "livery-list-agents" / "SKILL.md").exists()
     assert (repo / ".agents" / "skills" / "livery-talk-agent" / "SKILL.md").exists()
     assert (repo / ".agents" / "skills" / "livery-ticket-list" / "SKILL.md").exists()
+    assert (repo / ".agents" / "skills" / "livery-schedule-install" / "SKILL.md").exists()
     assert (repo / ".claude" / "commands" / "livery-list-agents.md").exists()
     assert (repo / ".claude" / "commands" / "livery-new-ticket.md").exists()
     assert (repo / ".claude" / "commands" / "livery-talk-agent.md").exists()
     assert (repo / ".claude" / "commands" / "livery-dispatch-status.md").exists()
+    assert (repo / ".claude" / "commands" / "livery-schedule-install.md").exists()
     assert "linked project repo" in (
         repo / ".agents" / "skills" / "livery-hello" / "SKILL.md"
     ).read_text()
@@ -362,6 +364,12 @@ def test_livery_link_command_writes_marker_and_git_exclude(tmp_path, monkeypatch
     ).read_text()
     assert "open and closed tickets" in (
         repo / ".agents" / "skills" / "livery-ticket-list" / "SKILL.md"
+    ).read_text()
+    assert "parent workspace" in (
+        repo / ".agents" / "skills" / "livery-schedule-install" / "SKILL.md"
+    ).read_text()
+    assert "--dry-run --format json" in (
+        repo / ".claude" / "commands" / "livery-schedule-install.md"
     ).read_text()
     assert "parent workspace" in (
         repo / ".claude" / "commands" / "livery-new-ticket.md"

@@ -54,6 +54,7 @@ def test_install_agent_hooks_targets_linked_repo_not_parent_workspace(tmp_path, 
     talk_skill = repo / ".agents" / "skills" / "livery-talk-agent" / "SKILL.md"
     ticket_list_skill = repo / ".agents" / "skills" / "livery-ticket-list" / "SKILL.md"
     dispatch_status_command = repo / ".claude" / "commands" / "livery-dispatch-status.md"
+    schedule_status_command = repo / ".claude" / "commands" / "livery-schedule-status.md"
     claude_command = repo / ".claude" / "commands" / "livery-walkie-talkie.md"
     assert "livery agents --format json" in list_skill.read_text()
     assert "parent workspace" in list_skill.read_text()
@@ -66,6 +67,8 @@ def test_install_agent_hooks_targets_linked_repo_not_parent_workspace(tmp_path, 
     assert "parent workspace" in ticket_list_skill.read_text()
     assert "livery dispatch status" in dispatch_status_command.read_text()
     assert "parent workspace" in dispatch_status_command.read_text()
+    assert "livery schedule status" in schedule_status_command.read_text()
+    assert "parent workspace" in schedule_status_command.read_text()
     assert "livery walkie new" in claude_command.read_text()
     assert "parent workspace" in claude_command.read_text()
     assert not (workspace / ".codex").exists()

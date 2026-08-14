@@ -4,6 +4,9 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Added
+- Fresh, upgraded, and linked workspaces now receive managed Claude slash commands and matching Claude/Codex skills for all ten `livery schedule` subcommands. The install and sync entrypoints preview native scheduler changes before applying them, while run and lifecycle entrypoints preserve explicit-mutation boundaries.
+
 ## 0.20.0 — 2026-08-13
 
 ### Added

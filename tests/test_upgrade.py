@@ -248,6 +248,31 @@ def test_compute_plan_creates_missing_command_shaped_assets(tmp_path):
     assert codex_skill_item.new_content == render_command_skill(asset)
 
 
+def test_compute_plan_backfills_schedule_harness_assets(tmp_path):
+    from livery.harness_assets import COMMAND_HARNESS_ASSETS
+
+    root = _fresh_workspace(tmp_path, cos_engine="both")
+    asset = next(a for a in COMMAND_HARNESS_ASSETS if a.skill_name == "livery-schedule-sync")
+    command_path = root / ".claude" / "commands" / "livery" / asset.slash_file
+    claude_skill_path = root / ".claude" / "skills" / asset.skill_name / "SKILL.md"
+    codex_skill_path = root / ".agents" / "skills" / asset.skill_name / "SKILL.md"
+    command_path.unlink()
+    claude_skill_path.unlink()
+    codex_skill_path.unlink()
+
+    plan = compute_plan(root)
+    command_item = next(i for i in plan.items if i.path == command_path)
+    claude_skill_item = next(i for i in plan.items if i.path == claude_skill_path)
+    codex_skill_item = next(i for i in plan.items if i.path == codex_skill_path)
+
+    assert command_item.action == Action.CREATE
+    assert command_item.new_content == render_command_slash(asset)
+    assert claude_skill_item.action == Action.CREATE
+    assert claude_skill_item.new_content == render_command_skill(asset)
+    assert codex_skill_item.action == Action.CREATE
+    assert codex_skill_item.new_content == render_command_skill(asset)
+
+
 def test_compute_plan_creates_missing_talk_assets(tmp_path):
     root = _fresh_workspace(tmp_path, cos_engine="both")
     command_path = root / ".claude" / "commands" / "livery" / "talk.md"

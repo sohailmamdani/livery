@@ -111,6 +111,43 @@ def test_init_workspace_installs_command_shaped_skill_content(tmp_path):
     assert "livery walkie list" in walkie_list.read_text()
 
 
+def test_schedule_commands_have_managed_harness_assets(tmp_path):
+    expected_commands = {
+        "livery schedule new",
+        "livery schedule list",
+        "livery schedule install",
+        "livery schedule run",
+        "livery schedule status",
+        "livery schedule enable",
+        "livery schedule disable",
+        "livery schedule uninstall",
+        "livery schedule sync",
+        "livery schedule logs",
+    }
+    schedule_assets = {
+        asset.command: asset
+        for asset in COMMAND_HARNESS_ASSETS
+        if asset.command.startswith("livery schedule ")
+    }
+    assert set(schedule_assets) == expected_commands
+
+    target = tmp_path / "ws"
+    init_workspace(target=target, name="test-ws", description="desc")
+
+    for asset in schedule_assets.values():
+        slash = target / ".claude" / "commands" / "livery" / asset.slash_file
+        claude_skill = target / ".claude" / "skills" / asset.skill_name / "SKILL.md"
+        codex_skill = target / ".agents" / "skills" / asset.skill_name / "SKILL.md"
+        assert asset.command in slash.read_text()
+        assert asset.command in claude_skill.read_text()
+        assert asset.command in codex_skill.read_text()
+
+    install_slash = target / ".claude" / "commands" / "livery" / "schedule-install.md"
+    run_skill = target / ".agents" / "skills" / "livery-schedule-run" / "SKILL.md"
+    assert "--dry-run --format json" in install_slash.read_text()
+    assert "incur provider usage" in run_skill.read_text()
+
+
 def test_init_workspace_writes_default_runtime_and_telegram(tmp_path):
     init_workspace(
         target=tmp_path / "ws",
