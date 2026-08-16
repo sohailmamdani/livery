@@ -61,15 +61,22 @@ Update later:
 uv tool upgrade livery
 ```
 
-After upgrading, run `livery upgrade-workspace` in any existing workspace to refresh framework-managed scaffolding without touching your custom content.
+After upgrading, preview and apply the framework-managed workspace refresh in
+each existing workspace. This backfills new scaffolding and managed harness
+entrypoints without touching your custom content:
+
+```sh
+livery upgrade-workspace          # preview
+livery upgrade-workspace --apply  # write the proposed updates
+```
 
 ### Pinning to a specific version (advanced)
 
 ```sh
-uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.13.0' livery
+uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.20.0' livery
 ```
 
-**Important caveat:** pinning with `@v0.13.0` (or any git ref) makes `uv tool upgrade livery` a no-op forever — uv re-resolves the same pinned ref each time and concludes nothing has changed. To move a pinned install to a newer version, you have to reinstall with the new tag (or drop the pin entirely):
+**Important caveat:** pinning with `@v0.20.0` (or any git ref) makes `uv tool upgrade livery` a no-op forever — uv re-resolves the same pinned ref each time and concludes nothing has changed. To move a pinned install to a newer version, you have to reinstall with the new tag (or drop the pin entirely):
 
 ```sh
 # move the pin forward when a newer tag exists
@@ -119,7 +126,8 @@ livery install-agent-hooks              # install linked-repo startup awareness 
 # Also installs linked-repo Livery entrypoints:
 # Claude Code: /livery-hello, /livery-list-agents, /livery-new-ticket, /livery-talk-agent,
 #              /livery-walkie-talkie, plus command-shaped entries like /livery-ticket-list
-# Codex: matching livery-* skills, including one skill per concrete livery command
+#              and /livery-schedule-install
+# Codex: matching livery-* skills, including livery-schedule-* for every schedule command
 
 # If this repo was already initialized as a standalone workspace, migrate it
 # into the shared workspace while linking it.
@@ -183,21 +191,24 @@ my-workspace/
 │   │   ├── hello.md                           # Livery orientation command
 │   │   ├── ticket-list.md                     # command-shaped wrappers
 │   │   ├── dispatch-status.md
+│   │   ├── schedule-install.md                # schedule new/list/install/run/status/...
 │   │   └── ...
 │   └── skills/                                # livery-* skills, including one per CLI command
 │       ├── livery-hello/SKILL.md
 │       ├── livery-ticket-list/SKILL.md
 │       ├── livery-dispatch-status/SKILL.md
+│       ├── livery-schedule-install/SKILL.md
 │       └── ...
 └── .agents/                                   # Codex's skill discovery dir (.agents/skills)
     └── skills/
         ├── livery-hello/SKILL.md
         ├── livery-ticket-list/SKILL.md
         ├── livery-dispatch-status/SKILL.md
+        ├── livery-schedule-install/SKILL.md
         └── ...
 ```
 
-`CLAUDE.md` and `AGENTS.md` are the same content with different names — one for each engine's convention. Same with shipped skills: they live in `.claude/skills/` for Claude Code and `.agents/skills/` for Codex. Livery ships a few friendly aliases (`livery-hello`, `livery-new-ticket`, `livery-talk-agent`, etc.) plus command-shaped skills such as `livery-ticket-list`, `livery-dispatch-status`, and `livery-memory-search` so the harness can discover the CLI surface directly. Claude Code slash commands live under `.claude/commands/livery/` so they stay grouped as Livery commands. `--cos-engine claude_code` skips the `.agents/` directory; `--cos-engine codex` skips `.claude/`. `--cos-engine pi` and `--cos-engine opencode` scaffold their `AGENTS.md`-style convention files without Claude/Codex-specific skill directories.
+`CLAUDE.md` and `AGENTS.md` are the same content with different names — one for each engine's convention. Same with shipped skills: they live in `.claude/skills/` for Claude Code and `.agents/skills/` for Codex. Livery ships a few friendly aliases (`livery-hello`, `livery-new-ticket`, `livery-talk-agent`, etc.) plus command-shaped skills such as `livery-ticket-list`, `livery-dispatch-status`, `livery-memory-search`, and all ten `livery-schedule-*` entries so the harness can discover the CLI surface directly. Claude Code slash commands live under `.claude/commands/livery/` so they stay grouped as Livery commands. `--cos-engine claude_code` skips the `.agents/` directory; `--cos-engine codex` skips `.claude/`. `--cos-engine pi` and `--cos-engine opencode` scaffold their `AGENTS.md`-style convention files without Claude/Codex-specific skill directories.
 
 ## Configuration (`livery.toml`)
 
@@ -324,6 +335,14 @@ livery schedule enable evening-brief
 livery schedule uninstall evening-brief           # keeps schedules/evening-brief.md
 ```
 
+Fresh, upgraded, and linked workspaces receive managed Claude slash commands
+and matching Claude/Codex skills for every schedule subcommand: `new`, `list`,
+`install`, `run`, `status`, `enable`, `disable`, `uninstall`, `sync`, and
+`logs`. The install and sync entrypoints preview native scheduler changes
+before applying them. Run, enable, disable, and uninstall remain explicit
+actions because they can launch paid runtime work or mutate host scheduler
+state.
+
 Every fire is a managed dispatch with a unique prompt/output directory and a
 normal durable attempt record. Scheduled attempts add `schedule_id`,
 `scheduled_for`, and `trigger` fields, so `livery dispatch status` sees them
@@ -402,7 +421,13 @@ livery upgrade-workspace          # dry run — shows what would change
 livery upgrade-workspace --apply  # actually write changes
 ```
 
-Hard guardrails: it never touches `livery.toml`, `agents/`, `tickets/`, existing `memory/` entries, or anything outside the `LIVERY-MANAGED` markers in your CoS convention files. Safe to run after every `uv tool upgrade livery`.
+Hard guardrails: it leaves agents, tickets, existing memory entries, custom
+harness files, and text outside the `LIVERY-MANAGED` convention blocks alone.
+It can add missing scaffolding (including `schedules/`) and create or refresh
+Livery-owned slash commands and skills. The one `livery.toml` exception is an
+additive, one-time `cos_engines` migration for legacy workspaces. Safe to run
+after every `uv tool upgrade livery`; use `--force` only when you explicitly
+want customized shipped command or skill files overwritten.
 
 ## Sync convention files
 
