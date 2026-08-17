@@ -51,6 +51,7 @@ from .paths import (
     write_link,
 )
 from .status import DEFAULT_RECENT_CLOSED_LIMIT, DEFAULT_STALE_DAYS, compute_status
+from .ticket_updates import UPDATE_KINDS, append_ticket_update
 from .hooks import HookStatus, install_hooks, uninstall_hooks
 from .upgrade import Action, apply_plan, compute_plan, compute_sync_plan
 from .telegram import (
@@ -785,6 +786,65 @@ def ticket_show(
     typer.echo(path.read_text())
 
 
+@ticket_app.command("update")
+def ticket_update_command(
+    query: str = typer.Argument(..., help="Ticket id or unique filename fragment"),
+    message: str = typer.Option(..., "--message", "-m", help="Concise human-readable update"),
+    actor: str = typer.Option("cos", "--actor", help="CoS or hired-agent id writing the update"),
+    kind: str = typer.Option("progress", "--kind", help=f"Update kind: {', '.join(UPDATE_KINDS)}"),
+    workspace: Optional[Path] = typer.Option(
+        None,
+        "--workspace",
+        help="Explicit workspace root; useful from an agent's project repo or worktree",
+    ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text or json. JSON is intended for agents/tools.",
+    ),
+) -> None:
+    """Append a distilled progress, decision, blocker, or result to a ticket."""
+    output_format = _validate_output_format(output_format)
+    root = workspace.expanduser().resolve() if workspace else find_root()
+    path = _find_ticket(root, query)
+    now = _now_iso()
+    try:
+        update = append_ticket_update(
+            workspace_root=root,
+            ticket_path=path,
+            actor=actor,
+            kind=kind,
+            message=message,
+            timestamp=now,
+        )
+    except (OSError, ValueError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+    if output_format == "json":
+        post = frontmatter.load(path)
+        _echo_json({
+            "update": {
+                "ticket_id": update.ticket_id,
+                "path": str(path.relative_to(root)),
+                "actor": update.actor,
+                "kind": update.kind,
+                "timestamp": update.timestamp,
+                "message": update.message,
+                "appended": update.appended,
+            },
+            "ticket": _ticket_payload(
+                post=post,
+                path=path,
+                root=root,
+                include_content=True,
+            ),
+        })
+        return
+    typer.echo(f"Updated {path.relative_to(root)}")
+
+
 @ticket_app.command("close")
 def ticket_close(
     query: str = typer.Argument(..., help="Ticket id or slug fragment"),
@@ -1424,10 +1484,12 @@ def dispatch_fan_out(
         AttemptStatus,
         FailureClass,
         load_attempt,
-        mark_finished,
         mark_running,
+        now_iso,
+        write_attempt,
     )
     from .config import load as _load_cfg
+    from .dispatch_runner import finalize_prepared_dispatch
     from .dispatch_hooks import get_hook_command, run_post_run_hook, run_pre_run_hook
 
     cfg = _load_cfg(root)
@@ -1462,6 +1524,14 @@ def dispatch_fan_out(
                 # Conservative: treat unexpected errors in the hook
                 # mechanism itself as blocking too — better to surface
                 # than to silently launch.
+                if prep.attempt_path:
+                    attempt = load_attempt(prep.attempt_path)
+                    attempt.status = AttemptStatus.FAILED
+                    attempt.failure_class = FailureClass.HOOK_ERROR
+                    attempt.failure_detail = f"before_run hook mechanism failed: {e}"
+                    attempt.finished_at = now_iso()
+                    attempt.exit_code = 1
+                    write_attempt(attempt, root)
                 skipped_by_hook.add(prep.assignee)
                 continue
 
@@ -1497,8 +1567,11 @@ def dispatch_fan_out(
                 prep = prep_by_assignee.get(name)
                 if prep is not None and getattr(prep, "attempt_path", None):
                     try:
-                        attempt = load_attempt(prep.attempt_path)
-                        mark_finished(attempt, exit_code=p.returncode or 0, workspace_root=root)
+                        finalize_prepared_dispatch(
+                            prep,
+                            workspace_root=root,
+                            exit_code=p.returncode or 0,
+                        )
                     except Exception as e:
                         typer.echo(f"  (warn) couldn't finalize attempt for {name}: {e}", err=True)
 
@@ -1540,9 +1613,8 @@ def dispatch_fan_out(
                     attempt.status = AttemptStatus.CANCELLED
                     attempt.failure_class = FailureClass.RUNTIME_ERROR
                     attempt.failure_detail = "operator aborted with Ctrl+C"
-                    from .attempts import write_attempt as _wa, now_iso as _now
-                    attempt.finished_at = _now()
-                    _wa(attempt, root)
+                    attempt.finished_at = now_iso()
+                    write_attempt(attempt, root)
                 except Exception:
                     pass
         raise typer.Exit(130)

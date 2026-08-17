@@ -27,6 +27,12 @@ is useful, but normal mutations should go through Livery commands so IDs,
 frontmatter, paths, linked workspaces, dispatch attempts, and compatibility
 rules stay consistent.
 
+Ticket Threads are the human-readable activity record. A CoS or operating
+agent should call `livery ticket update` at meaningful milestones rather than
+editing markdown directly. Livery uses the same locked append path to mirror
+dispatch lifecycle transitions and distilled final summaries; attempt JSON
+retains full runtime metadata.
+
 ## JSON mode
 
 Human-readable text remains the default. Harnesses and scripts should prefer
@@ -41,6 +47,7 @@ livery ticket new --title "..." --assignee cos --repo api --description "..." --
 livery ticket list --format json
 livery ticket list --repo api --format json
 livery ticket show <ticket-id> --format json
+livery ticket update <ticket-id> --kind progress --message "..." --format json
 livery ticket close <ticket-id> --summary "..." --no-push --format json
 livery memory add --type lesson --title "..." --body "..." --format json
 livery memory search <query> --format json

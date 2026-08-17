@@ -53,7 +53,7 @@ _TOOL_CALL_RE = re.compile(
 def build_tool_system_prompt(schemas: list[dict]) -> str:
     """Compact system message that tells the model how to call tools."""
     lines = [
-        "You have access to the tools below. Use them to gather information before answering.",
+        "You have access to the tools below. Use them as needed to research and keep the current ticket updated.",
         "",
         "AVAILABLE TOOLS:",
     ]

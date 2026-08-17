@@ -227,7 +227,7 @@ def test_compute_plan_creates_missing_command_shaped_assets(tmp_path):
     from livery.harness_assets import COMMAND_HARNESS_ASSETS
 
     root = _fresh_workspace(tmp_path, cos_engine="both")
-    asset = next(a for a in COMMAND_HARNESS_ASSETS if a.skill_name == "livery-ticket-list")
+    asset = next(a for a in COMMAND_HARNESS_ASSETS if a.skill_name == "livery-ticket-update")
     command_path = root / ".claude" / "commands" / "livery" / asset.slash_file
     claude_skill_path = root / ".claude" / "skills" / asset.skill_name / "SKILL.md"
     codex_skill_path = root / ".agents" / "skills" / asset.skill_name / "SKILL.md"

@@ -12,12 +12,15 @@ emitted by the model.
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 
 USER_AGENT = "livery-junior-research/0.1 (+https://github.com/sohailmamdani/livery)"
 HTTP_TIMEOUT = 30.0
@@ -137,11 +140,79 @@ def web_search(query: str, max_results: int = 5) -> str:
 
 
 # ---------------------------------------------------------------------------
+# ticket_update — append to the ticket bound to this dispatch
+# ---------------------------------------------------------------------------
+
+
+def ticket_update(message: str, kind: str = "progress") -> str:
+    """Append a concise update to the current dispatch ticket.
+
+    The dispatch command binds workspace, ticket, and actor through private
+    environment context. Models can choose only the update text and kind, so
+    this tool cannot be redirected to an unrelated ticket or workspace.
+    """
+    workspace_raw = os.environ.get("LIVERY_WORKSPACE_ROOT")
+    ticket_id = os.environ.get("LIVERY_TICKET_ID")
+    actor = os.environ.get("LIVERY_ASSIGNEE")
+    if not workspace_raw or not ticket_id or not actor:
+        return "error: ticket_update is only available inside a ticket dispatch"
+
+    from livery.ticket_updates import append_ticket_update, find_ticket_path
+
+    workspace_root = Path(workspace_raw).expanduser().resolve()
+    try:
+        ticket_path = find_ticket_path(workspace_root, ticket_id)
+        update = append_ticket_update(
+            workspace_root=workspace_root,
+            ticket_path=ticket_path,
+            actor=actor,
+            kind=kind,
+            message=message,
+            timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
+    except (OSError, ValueError) as exc:
+        return f"error: could not update ticket ({exc})"
+    return json.dumps({
+        "ticket_id": update.ticket_id,
+        "kind": update.kind,
+        "actor": update.actor,
+        "path": str(update.path),
+        "appended": update.appended,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Registry + OpenAI-style schemas
 # ---------------------------------------------------------------------------
 
 
 TOOLS: dict[str, Tool] = {
+    "ticket_update": Tool(
+        name="ticket_update",
+        schema={
+            "type": "function",
+            "function": {
+                "name": "ticket_update",
+                "description": "Append a concise milestone, decision, blocker, or result to the current Livery ticket. Use at meaningful progress points; never paste raw logs or narrate every tool call.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "description": "A concise, human-readable update focused on outcome, evidence, decision, blocker, or next step.",
+                        },
+                        "kind": {
+                            "type": "string",
+                            "enum": ["progress", "decision", "blocker", "result"],
+                            "default": "progress",
+                        },
+                    },
+                    "required": ["message"],
+                },
+            },
+        },
+        run=ticket_update,
+    ),
     "web_fetch": Tool(
         name="web_fetch",
         schema={

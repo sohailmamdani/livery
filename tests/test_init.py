@@ -102,12 +102,15 @@ def test_init_workspace_installs_command_shaped_skill_content(tmp_path):
 
     ticket_list = target / ".agents" / "skills" / "livery-ticket-list" / "SKILL.md"
     dispatch_status = target / ".agents" / "skills" / "livery-dispatch-status" / "SKILL.md"
+    ticket_update = target / ".agents" / "skills" / "livery-ticket-update" / "SKILL.md"
     walkie_list = target / ".claude" / "commands" / "livery" / "walkie-list.md"
 
     assert "name: livery-ticket-list" in ticket_list.read_text()
     assert "open and closed tickets" in ticket_list.read_text()
     assert "livery dispatch status" in dispatch_status.read_text()
     assert "scheduled or prepared agent work status" in dispatch_status.read_text()
+    assert "livery ticket update" in ticket_update.read_text()
+    assert "do not paste raw logs" in ticket_update.read_text().lower()
     assert "livery walkie list" in walkie_list.read_text()
 
 
@@ -180,6 +183,9 @@ def test_init_workspace_default_writes_both_cos_files(tmp_path):
     assert "The pushback rule" in claude
     assert "≥70% confidence" in claude
     assert "opinionated framework" in claude
+    assert "## Ticket activity" in claude
+    assert "livery ticket update <id>" in claude
+    assert "Attempt JSON remains the detailed machine audit log" in claude
 
 
 def test_init_workspace_cos_engine_claude_code_only(tmp_path):

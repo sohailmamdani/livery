@@ -138,8 +138,23 @@ you, not the intern-compliance version.
 ## Operational defaults
 
 - On ticket close, ping Telegram if `livery.toml` configures it.
-- Every ticket mutation should be followed by a git commit.
+- Commit ticket changes at a coherent checkpoint. Automated dispatch updates
+  may accumulate in the ticket until close; do not create a git commit for
+  every progress line.
 - Plain language. Tech-savvy users may not be programmers; skip jargon.
+
+## Ticket activity
+
+- The ticket `## Thread` is the shared human-readable record of work. Keep it
+  current whether the operating agent is this CoS session or a hired agent.
+- While actively working a ticket, use `livery ticket update <id> --kind
+  <progress|decision|blocker|result> --message "..." --format json` after the
+  approach is settled, at material milestones or decisions, on blockers, and
+  before reporting completion.
+- Distill updates to outcomes, evidence, decisions, and next steps. Do not
+  paste raw logs or narrate every command/tool call.
+- Livery mirrors dispatch lifecycle events and final summaries into the
+  ticket automatically. Attempt JSON remains the detailed machine audit log.
 
 ## Workspace memory
 
@@ -182,9 +197,10 @@ you, not the intern-compliance version.
 
 You file tickets (`livery ticket new`), the CoS handles them directly or
 prepares dispatch (`livery dispatch prep <ticket> --worktree`) to a hired
-agent, the agent runs and reports back via a `=== DISPATCH_SUMMARY ===`
-block, you (or the CoS) close the ticket (`livery ticket close <id>
---summary`). Worktrees keep agents from stepping on your in-progress work.
+agent, the operating agent keeps the ticket Thread current with distilled
+updates, and the agent reports back via a `=== DISPATCH_SUMMARY ===` block.
+You (or the CoS) close the ticket (`livery ticket close <id> --summary`).
+Worktrees keep agents from stepping on your in-progress work.
 
 ## Scheduling
 

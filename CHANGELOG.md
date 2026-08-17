@@ -5,6 +5,9 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 ## Unreleased
 
 ### Added
+- Ticket Threads are now the shared human-readable activity record. `livery ticket update` appends locked, concurrency-safe progress, decision, blocker, and result entries from a workspace, linked repo, or an agent worktree.
+- Dispatch preparation, start, completion, blocker, failure, and cancellation events are mirrored from durable attempt state into the ticket with idempotent markers. Final `DISPATCH_SUMMARY` fields are distilled into summary, files, tests, and flags while raw commands, paths, logs, and full runtime metadata remain in attempt records.
+- CoS convention files and dispatch prompts now require meaningful ticket updates while work is underway. LM Studio and Ollama agents receive a dispatch-bound `ticket_update` tool that cannot target unrelated tickets or workspaces.
 - Fresh, upgraded, and linked workspaces now receive managed Claude slash commands and matching Claude/Codex skills for all ten `livery schedule` subcommands. The install and sync entrypoints preview native scheduler changes before applying them, while run and lifecycle entrypoints preserve explicit-mutation boundaries.
 
 ## 0.20.0 — 2026-08-13

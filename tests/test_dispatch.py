@@ -50,6 +50,8 @@ def test_compose_prompt_includes_preamble_agents_and_ticket():
         agents_md="# AGENTS\nhello\n",
         ticket_md="# Ticket\nwork to do\n",
         ticket_id="2026-04-18-001-example",
+        workspace_root=Path("/tmp/livery workspace"),
+        ticket_path=Path("/tmp/livery workspace/tickets/example.md"),
     )
     assert "acting as the \"lead-dev\" agent" in out
     assert "---BEGIN AGENTS.md---" in out
@@ -60,6 +62,11 @@ def test_compose_prompt_includes_preamble_agents_and_ticket():
     assert "---BEGIN TICKET---" in out
     assert "---END TICKET---" in out
     assert "=== DISPATCH_SUMMARY ===" in out
+    assert "## Keep the ticket current" in out
+    assert "livery ticket update 2026-04-18-001-example" in out
+    assert "--workspace '/tmp/livery workspace'" in out
+    assert "meaningful moments" in out
+    assert "Do not paste raw command output" in out
     assert "2026-04-18-001-example" in out
     assert "Proceed." in out
 
@@ -176,12 +183,18 @@ def test_build_runtime_command_lm_studio(tmp_path):
         cwd="/Users/sohail/code/brand",
         prompt_path=prompt,
         output_path=output,
+        workspace_root=tmp_path / "livery workspace",
+        assignee="research",
+        ticket_id="2026-08-17-001-research",
     )
     # lm_studio adapter uses `uv run --directory <livery root>` so python
     # resolves the import regardless of the agent's declared cwd.
     assert "uv run --directory" in cmd
     assert "python -m livery.runtimes.lm_studio" in cmd
     assert "--model gemma-4-26B-A4B-it-MLX-8bit" in cmd
+    assert "LIVERY_WORKSPACE_ROOT=" in cmd
+    assert "LIVERY_ASSIGNEE=research" in cmd
+    assert "LIVERY_TICKET_ID=2026-08-17-001-research" in cmd
     assert f"< {prompt}" in cmd
     assert f"> {output}" in cmd
 
@@ -234,6 +247,11 @@ def test_prepare_dispatch_end_to_end(tmp_path):
     assert "acting as the \"lead-dev\"" in prompt_text
     assert "Build X." in prompt_text
     assert ticket_id in prompt_text
+    assert "livery ticket update" in prompt_text
+    assert str(root) in prompt_text
+    ticket_text = ticket_path.read_text()
+    assert "Prepared dispatch" in ticket_text
+    assert "— livery — dispatch" in ticket_text
 
 
 def test_prepare_dispatch_rejects_cos_assignee(tmp_path):

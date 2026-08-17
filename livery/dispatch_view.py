@@ -67,7 +67,7 @@ class DispatchView:
     age_seconds: int           # since last mtime (output file or attempt write)
     size_bytes: int
     last_line: str             # last non-blank line of the tail
-    summary_excerpt: list[str] = field(default_factory=list)  # up to 5 lines from the DISPATCH_SUMMARY block
+    summary_excerpt: list[str] = field(default_factory=list)  # bounded lines from the DISPATCH_SUMMARY block
 
     # Attempt-backed extras (v0.9+). When `attempt is not None`, prefer it
     # for status / pid / failure_class display; the legacy `state` field
@@ -90,8 +90,9 @@ def _parse_label(out_path: Path) -> str:
 def _read_tail(path: Path) -> tuple[str, list[str]]:
     """Read the trailing TAIL_BYTES of the file. Returns (last_line, summary_excerpt).
 
-    The summary excerpt is up to the first 5 non-blank lines inside the
-    DISPATCH_SUMMARY block. Never returns the full output — keeps memory bounded.
+    The summary excerpt is up to the first 10 non-blank lines inside the
+    DISPATCH_SUMMARY block. That retains the complete six-field standard
+    summary while staying bounded and never returning the full output.
     """
     try:
         size = path.stat().st_size
@@ -112,7 +113,7 @@ def _read_tail(path: Path) -> tuple[str, list[str]]:
         if end_idx == -1:
             end_idx = len(text)
         block = text[begin_idx + len(SUMMARY_BEGIN):end_idx].splitlines()
-        summary = [line for line in block if line.strip()][:5]
+        summary = [line for line in block if line.strip()][:10]
 
     return last_line, summary
 

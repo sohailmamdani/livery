@@ -59,6 +59,79 @@ def test_ticket_commands_emit_json_records(tmp_path, monkeypatch):
     assert shown_payload["ticket"]["id"] == ticket["id"]
     assert shown_payload["ticket"]["metadata"]["title"] == "Define harness API"
 
+    updated = runner.invoke(
+        app,
+        [
+            "ticket",
+            "update",
+            ticket["id"],
+            "--actor",
+            "cos",
+            "--kind",
+            "decision",
+            "--message",
+            "Use the CLI as the mutation boundary.",
+            "--format",
+            "json",
+        ],
+    )
+    assert updated.exit_code == 0, updated.stdout + updated.stderr
+    update_payload = json.loads(updated.stdout)
+    assert update_payload["update"]["ticket_id"] == ticket["id"]
+    assert update_payload["update"]["kind"] == "decision"
+    assert "— cos — decision" in update_payload["ticket"]["content"]
+    assert "Use the CLI as the mutation boundary." in update_payload["ticket"]["content"]
+
+
+def test_ticket_update_accepts_explicit_workspace_outside_repo(tmp_path, monkeypatch):
+    workspace = _workspace(tmp_path)
+    elsewhere = tmp_path / "agent-worktree"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    runner = CliRunner()
+
+    monkeypatch.chdir(workspace)
+    created = runner.invoke(
+        app,
+        [
+            "ticket",
+            "new",
+            "--title",
+            "Track agent progress",
+            "--assignee",
+            "cos",
+            "--description",
+            "Keep the ticket current.",
+            "--format",
+            "json",
+        ],
+    )
+    assert created.exit_code == 0, created.stdout + created.stderr
+    ticket_id = json.loads(created.stdout)["ticket"]["id"]
+    monkeypatch.chdir(elsewhere)
+
+    updated = runner.invoke(
+        app,
+        [
+            "ticket",
+            "update",
+            ticket_id,
+            "--workspace",
+            str(workspace),
+            "--actor",
+            "lead-dev",
+            "--kind",
+            "progress",
+            "--message",
+            "Finished the first milestone.",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert updated.exit_code == 0, updated.stdout + updated.stderr
+    assert json.loads(updated.stdout)["update"]["actor"] == "lead-dev"
+
 
 def test_ticket_new_records_explicit_repo_and_list_filters(tmp_path, monkeypatch):
     workspace = _workspace(tmp_path)

@@ -64,7 +64,34 @@ Pushback / flags for sohail: <list or "none">
 """
 
 
-def compose_prompt(*, assignee: str, agents_md: str, ticket_md: str, ticket_id: str) -> str:
+TICKET_UPDATE_BLOCK = """\
+## Keep the ticket current
+
+The ticket markdown is the human-readable record of this work. Update it as
+you go at meaningful moments: after you settle the approach, after a material
+milestone or decision, when you hit a blocker, and before your final dispatch
+summary. Keep each update distilled to outcomes, decisions, evidence, and next
+steps. Do not paste raw command output or narrate every tool call.
+
+Use this command from any working directory:
+
+`livery ticket update {ticket_id} --workspace {workspace_root} --actor {assignee} --kind <progress|decision|blocker|result> --message "<concise update>" --format json`
+
+The ticket file is `{ticket_path}`. Use the command rather than rewriting the
+file directly so concurrent agents do not overwrite one another. If your
+runtime exposes a `ticket_update` tool, use that tool instead of the command.
+"""
+
+
+def compose_prompt(
+    *,
+    assignee: str,
+    agents_md: str,
+    ticket_md: str,
+    ticket_id: str,
+    workspace_root: Path | None = None,
+    ticket_path: Path | None = None,
+) -> str:
     """Build the dispatch prompt from the agent's AGENTS.md + the ticket markdown."""
     lines = [
         PROMPT_PREAMBLE.format(assignee=assignee),
@@ -77,6 +104,18 @@ def compose_prompt(*, assignee: str, agents_md: str, ticket_md: str, ticket_id: 
         "",
         WORKER_DISCOVERY_HINT.rstrip(),
         "",
+    ]
+    if workspace_root is not None and ticket_path is not None:
+        lines.extend([
+            TICKET_UPDATE_BLOCK.format(
+                ticket_id=ticket_id,
+                workspace_root=shlex.quote(str(workspace_root)),
+                assignee=shlex.quote(assignee),
+                ticket_path=str(ticket_path),
+            ).rstrip(),
+            "",
+        ])
+    lines.extend([
         DISPATCH_SUMMARY_BLOCK.format(ticket_id=ticket_id).rstrip(),
         "",
         "---BEGIN TICKET---",
@@ -87,7 +126,7 @@ def compose_prompt(*, assignee: str, agents_md: str, ticket_md: str, ticket_id: 
         "",
         "Proceed.",
         "",
-    ]
+    ])
     return "\n".join(lines)
 
 
@@ -99,6 +138,9 @@ def build_runtime_command(
     cwd: str,
     prompt_path: Path,
     output_path: Path,
+    workspace_root: Path | None = None,
+    assignee: str | None = None,
+    ticket_id: str | None = None,
 ) -> str:
     """Return the shell command to launch the runtime with the composed prompt.
 
@@ -162,12 +204,20 @@ def build_runtime_command(
                 f"{runtime} runtime requires an explicit model in agent.md"
             )
         livery_root = str(Path(__file__).resolve().parent.parent)
-        parts = [
+        parts: list[str] = []
+        if workspace_root is not None and assignee and ticket_id:
+            parts.extend([
+                "env",
+                f"LIVERY_WORKSPACE_ROOT={workspace_root}",
+                f"LIVERY_ASSIGNEE={assignee}",
+                f"LIVERY_TICKET_ID={ticket_id}",
+            ])
+        parts.extend([
             "uv", "run", "--directory", livery_root,
             "python", "-m", "livery.runtimes.lm_studio",
             "--model", model,
             "--verbose",
-        ]
+        ])
         if runtime == "ollama":
             parts += ["--url", "http://localhost:11434/v1"]
         quoted = " ".join(shlex.quote(p) for p in parts)
@@ -282,6 +332,8 @@ def prepare_dispatch(
         agents_md=agents_md,
         ticket_md=ticket_md,
         ticket_id=ticket_id,
+        workspace_root=root,
+        ticket_path=ticket_path,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -298,6 +350,9 @@ def prepare_dispatch(
         cwd=actual_cwd,
         prompt_path=prompt_path,
         output_path=output_path,
+        workspace_root=root,
+        assignee=str(assignee),
+        ticket_id=ticket_id,
     )
 
     # Write the attempt record. This is the durable metadata the rest of

@@ -133,9 +133,10 @@ Plus the **CoS** — your Claude Code session running in the workspace directory
 1. **You file a ticket**, either through conversation with the CoS using the Livery ticket command/skill or directly (`livery ticket new --title "..." --assignee research"`).
 2. **CoS discusses scope** with you, pushes back on anything unclear, then either handles it directly (for `assignee: cos` tickets) or prepares a dispatch for the named agent.
 3. **Dispatch runs in the background** with `livery dispatch prep <ticket> --worktree`. Output streams to `/tmp/livery-dispatch-<ticket>.out`. For engineering work you use `--worktree` so the agent can't step on your in-progress changes.
-4. **The agent finishes** with a `=== DISPATCH_SUMMARY ===` block stating what it did, what it touched, and any pushback it wants you to see.
-5. **CoS reads the summary**, reports to you, and — on your go-ahead — runs `livery ticket close <ticket> --summary "..."` which commits, pushes, and pings Telegram.
-6. **CoS captures durable lessons** with `livery memory add` only when the ticket produced reusable knowledge, not for every routine close.
+4. **The ticket stays current.** Livery mirrors lifecycle events; the operating agent uses `livery ticket update` for meaningful milestones, decisions, blockers, and its final result. Updates are distilled rather than raw tool narration.
+5. **The agent finishes** with a `=== DISPATCH_SUMMARY ===` block. Livery distills its summary, files, tests, and flags into the ticket while attempt JSON keeps the detailed runtime record.
+6. **CoS reviews the ticket**, reports to you, and — on your go-ahead — runs `livery ticket close <ticket> --summary "..."` which commits, pushes, and pings Telegram.
+7. **CoS captures durable lessons** with `livery memory add` only when the ticket produced reusable knowledge, not for every routine close.
 
 ### Why two research agents?
 

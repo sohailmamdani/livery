@@ -24,7 +24,7 @@ Livery writes the composed prompt to a temp file, then builds a shell command of
 <binary> [flags] < /tmp/livery-dispatch-<ticket>.txt > /tmp/livery-dispatch-<ticket>.out 2>&1
 ```
 
-The harness reads the prompt on stdin, runs autonomously with its own tool surface, and writes its output (including the required `=== DISPATCH_SUMMARY ===` block) to the output file. When it finishes, you close the ticket with `livery ticket close` and the loop moves on.
+The harness reads the prompt on stdin, runs autonomously with its own tool surface, keeps the ticket Thread current through `livery ticket update`, and writes its output (including the required `=== DISPATCH_SUMMARY ===` block) to the output file. Livery mirrors lifecycle events and the distilled final summary into the ticket; when review is complete, you close it with `livery ticket close`.
 
 Livery passes flags that disable interactive approval gates (`--dangerously-bypass-approvals-and-sandbox` for Codex, `--dangerously-skip-permissions` for Claude Code, `--force` for Cursor). This is intentional: dispatched agents run unattended.
 
@@ -58,10 +58,11 @@ If you want an agent to have access to, say, a specific MCP server, configure th
 
 There's no harness, so Livery provides a minimal built-in tool set from `livery/runtimes/tools.py`:
 
+- **`ticket_update(message, kind="progress")`** — append a concise milestone, decision, blocker, or result to the ticket bound to the current dispatch. The model cannot redirect it to another ticket or workspace.
 - **`web_fetch(url, max_chars=20000)`** — GET a URL, strip HTML, return text.
 - **`web_search(query, max_results=5)`** — DuckDuckGo HTML endpoint, returns a JSON list of results.
 
-Both use stdlib `urllib` with a 30-second timeout. No filesystem tools, no shell, no database access. This is intentional scope: raw-LLM agents in Livery today are for research-style work (read the web, write text back into the ticket thread), not engineering.
+The web tools use stdlib `urllib` with a 30-second timeout. There is no general filesystem tool, shell, or database access; the only write capability is the dispatch-bound ticket update. This is intentional scope: raw-LLM agents in Livery today are for research-style work, not engineering.
 
 Tool calls use a custom wire format (`<tool_call>{"name": "...", "arguments": {...}}</tool_call>`) parsed by Livery directly. See the docstring at the top of `livery/runtimes/lm_studio.py` for why we sidestep LM Studio's built-in tool-call path — in short, it fails silently under extended sessions.
 

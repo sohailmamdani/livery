@@ -100,12 +100,12 @@ def test_last_line_skips_blank_lines(tmp_path):
     assert v.last_line == "real content"
 
 
-def test_summary_excerpt_capped_at_5_lines(tmp_path):
+def test_summary_excerpt_capped_at_10_lines(tmp_path):
     extra = "\n".join(f"line {i}" for i in range(20))
     body = f"prelude\n{SUMMARY_BEGIN}\n{extra}\n{SUMMARY_END}\n"
     _write_output(tmp_path, ticket="t", assignee="a", body=body)
     v = list_dispatches(tmp_path)[0]
-    assert len(v.summary_excerpt) == 5
+    assert len(v.summary_excerpt) == 10
 
 
 def test_find_dispatch_unique_match(tmp_path):

@@ -318,7 +318,15 @@ Livery prints a shell command at the end. Run it (usually in the background, so 
 <paste the printed command> &
 ```
 
-Wait for it to finish. When it does, look at the output file for the `=== DISPATCH_SUMMARY ===` block. That's the agent's report: what it did, what it touched, any pushback it wants you to see.
+While it runs, the ticket Thread becomes the readable activity record. Livery
+adds dispatch lifecycle events automatically, and the agent is instructed to
+append distilled milestones, decisions, blockers, and its final result with
+`livery ticket update`. The detailed prompt, paths, PID, hooks, and raw output
+remain in the attempt JSON and output file instead of cluttering the ticket.
+
+When it finishes, the final `=== DISPATCH_SUMMARY ===` is also distilled into
+the ticket. Review the ticket Thread for what it did, what it touched, tests,
+and any flags.
 
 Review the work. If it's good:
 
@@ -326,7 +334,8 @@ Review the work. If it's good:
 livery ticket close <ticket-id> --summary "Merged from worktree. Shipped."
 ```
 
-If it needs revision, append notes to the ticket's `## Thread` and dispatch again.
+If it needs revision, run `livery ticket update <ticket-id> --kind decision
+--message "..."` and dispatch again.
 
 ## Step 9 (optional): Telegram
 

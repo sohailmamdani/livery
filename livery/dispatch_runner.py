@@ -38,6 +38,39 @@ class DispatchExecution:
     status: AttemptStatus
 
 
+def finalize_prepared_dispatch(
+    prep: DispatchPrep,
+    *,
+    workspace_root: Path,
+    exit_code: int,
+) -> AttemptStatus:
+    """Persist final runtime state, summary, and ticket-facing result."""
+    if prep.attempt_path is None:
+        raise ValueError("managed execution requires a durable attempt record")
+
+    _, summary = _read_tail(prep.output_path)
+    attempt = load_attempt(prep.attempt_path)
+    mark_finished(
+        attempt,
+        exit_code=exit_code,
+        workspace_root=workspace_root,
+        summary_excerpt=summary,
+    )
+    attempt = load_attempt(prep.attempt_path)
+    if exit_code == 0 and any(
+        line.strip().lower() == "status: blocked" for line in summary
+    ):
+        attempt.status = AttemptStatus.BLOCKED
+        attempt.failure_detail = "agent reported work blocked"
+        write_attempt(attempt, workspace_root)
+    elif exit_code == 0 and not summary:
+        attempt.status = AttemptStatus.FAILED
+        attempt.failure_class = FailureClass.RUNTIME_ERROR
+        attempt.failure_detail = "runtime exited without DISPATCH_SUMMARY"
+        write_attempt(attempt, workspace_root)
+    return load_attempt(prep.attempt_path).status
+
+
 def _mark_hook_mechanism_failed(
     prep: DispatchPrep,
     *,
@@ -130,26 +163,11 @@ def execute_prepared_dispatch(
         write_attempt(attempt, workspace_root)
         raise
 
-    _, summary = _read_tail(prep.output_path)
-    attempt = load_attempt(prep.attempt_path)
-    mark_finished(
-        attempt,
-        exit_code=exit_code,
+    finalize_prepared_dispatch(
+        prep,
         workspace_root=workspace_root,
-        summary_excerpt=summary,
+        exit_code=exit_code,
     )
-    attempt = load_attempt(prep.attempt_path)
-    if exit_code == 0 and any(
-        line.strip().lower() == "status: blocked" for line in summary
-    ):
-        attempt.status = AttemptStatus.BLOCKED
-        attempt.failure_detail = "agent reported scheduled work blocked"
-        write_attempt(attempt, workspace_root)
-    elif exit_code == 0 and not summary:
-        attempt.status = AttemptStatus.FAILED
-        attempt.failure_class = FailureClass.RUNTIME_ERROR
-        attempt.failure_detail = "runtime exited without DISPATCH_SUMMARY"
-        write_attempt(attempt, workspace_root)
 
     if after_run_cmd:
         try:

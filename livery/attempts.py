@@ -268,7 +268,7 @@ def ensure_runtime_gitignore(workspace_root: Path) -> Path:
     existing = gitignore.read_text() if gitignore.exists() else "# Livery runtime state. Not for git.\n"
     lines = existing.splitlines()
     changed = False
-    for pattern in ("dispatch/", "logs/", "schedules/"):
+    for pattern in ("dispatch/", "logs/", "schedules/", "ticket-locks/"):
         if pattern not in lines:
             lines.append(pattern)
             changed = True
@@ -331,6 +331,13 @@ def write_attempt(attempt: DispatchAttempt, workspace_root: Path) -> Path:
     body = json.dumps(attempt.to_json_dict(), indent=2, sort_keys=True) + "\n"
     tmp_path.write_text(body)
     os.replace(tmp_path, final_path)  # atomic on POSIX; works across versions
+
+    # Attempt JSON remains the machine record; the ticket gets a distilled,
+    # idempotent lifecycle entry for people. Imported lazily to keep the
+    # ticket module free to type-reference DispatchAttempt without a cycle.
+    from .ticket_updates import sync_attempt_to_ticket
+
+    sync_attempt_to_ticket(attempt, workspace_root)
     return final_path
 
 

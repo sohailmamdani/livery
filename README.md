@@ -15,6 +15,7 @@ Tech-savvy operators (not necessarily programmers) who want an AI workforce on t
 - A **workspace** (a directory with `agents/`, `tickets/`, config) that becomes your CoS's operating context.
 - **Linked project repos** so you can run `livery` commands from source repos while keeping one shared workspace/backlog.
 - A **CLI** for hiring agents, filing tickets, dispatching work to agents, closing the loop.
+- **Living ticket threads** that the CoS and hired agents update with distilled milestones, decisions, blockers, and results while Livery mirrors dispatch lifecycle events automatically.
 - **Workspace memory** for durable decisions, lessons, and preferences as git-tracked markdown.
 - **Runtime adapters** so agents can live on different stacks: Claude Code CLI, Codex CLI, Cursor, LM Studio, Ollama. Adding a new adapter is ~30 lines of Python.
 - **Durable dispatch attempts** under `.livery/dispatch/attempts/`, with status, PID, failures, hook outcomes, prompt path, and output path recorded per run.
@@ -185,17 +186,19 @@ my-workspace/
 ├── schedules/                                 # git-tracked recurring and one-shot agent tasks
 ├── talk/                                      # append-only operator-to-agent transcripts, created on first use
 ├── walkie-talkie/                             # append-only AI-to-AI debate transcripts, created on first use
-├── .livery/                                   # ignored runtime state: attempts, hooks, schedule runs/install receipts
+├── .livery/                                   # ignored runtime state: attempts, hooks, ticket locks, schedule runs/install receipts
 ├── .claude/                                   # Claude Code's skill discovery dir
 │   ├── commands/livery/                       # grouped Livery slash commands
 │   │   ├── hello.md                           # Livery orientation command
 │   │   ├── ticket-list.md                     # command-shaped wrappers
+│   │   ├── ticket-update.md                   # concise progress/decision/blocker/result updates
 │   │   ├── dispatch-status.md
 │   │   ├── schedule-install.md                # schedule new/list/install/run/status/...
 │   │   └── ...
 │   └── skills/                                # livery-* skills, including one per CLI command
 │       ├── livery-hello/SKILL.md
 │       ├── livery-ticket-list/SKILL.md
+│       ├── livery-ticket-update/SKILL.md
 │       ├── livery-dispatch-status/SKILL.md
 │       ├── livery-schedule-install/SKILL.md
 │       └── ...
@@ -291,7 +294,25 @@ Prepare a dispatch (composes the prompt, prints the shell command to run):
 livery dispatch prep <ticket-id> --worktree
 ```
 
-Run the printed command (usually as a background task so you can keep working). Every prepared dispatch writes a durable attempt record to `.livery/dispatch/attempts/<attempt-id>.json`, pointing at the prompt file, output file, runtime, model, PID/status when known, and any hook outcomes. When the agent finishes, read the summary and close the ticket with `livery ticket close`.
+Run the printed command (usually as a background task so you can keep working). Every prepared dispatch writes a durable attempt record to `.livery/dispatch/attempts/<attempt-id>.json`, pointing at the prompt file, output file, runtime, model, PID/status when known, and any hook outcomes.
+
+The attempt JSON is the detailed machine record; the ticket Thread is the
+human record. Livery automatically appends distilled prepared, running,
+completed, blocked, failed, and cancelled events. The dispatch prompt also
+requires the operating agent to record meaningful milestones, decisions, and
+blockers while it works:
+
+```sh
+livery ticket update <ticket-id> \
+  --kind decision \
+  --message "Use the existing parser; the replacement would break old workspaces." \
+  --format json
+```
+
+Updates are locked so fan-out agents cannot overwrite one another. They should
+capture outcomes, evidence, decisions, and next steps—not raw logs or every
+tool call. When the agent finishes, review the ticket and close it with
+`livery ticket close`.
 
 To run **the same ticket against multiple agents in parallel** — e.g. to triangulate a research output across two different models — use fan-out:
 

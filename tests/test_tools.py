@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+import frontmatter
+
 from livery.runtimes import tools
 
 
@@ -120,9 +122,48 @@ def test_execute_tool_call_bad_args():
     assert out.startswith("error: bad arguments")
 
 
+def test_ticket_update_tool_is_bound_to_dispatch_context(tmp_path, monkeypatch):
+    ticket_id = "2026-08-17-001-tool-update"
+    tickets = tmp_path / "tickets"
+    tickets.mkdir()
+    ticket_path = tickets / f"{ticket_id}.md"
+    ticket_path.write_text(frontmatter.dumps(frontmatter.Post(
+        "## Description\n\nTest.\n\n## Thread\n",
+        id=ticket_id,
+        title="Tool update",
+        assignee="research",
+        status="open",
+        created="2026-08-17T10:00:00Z",
+        updated="2026-08-17T10:00:00Z",
+    )) + "\n")
+    monkeypatch.setenv("LIVERY_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("LIVERY_TICKET_ID", ticket_id)
+    monkeypatch.setenv("LIVERY_ASSIGNEE", "research")
+
+    raw = tools.execute_tool_call(
+        "ticket_update",
+        {"kind": "decision", "message": "Primary sources are sufficient."},
+    )
+
+    payload = json.loads(raw)
+    assert payload["ticket_id"] == ticket_id
+    assert payload["actor"] == "research"
+    assert "— research — decision" in ticket_path.read_text()
+    assert "Primary sources are sufficient." in ticket_path.read_text()
+
+
+def test_ticket_update_tool_rejects_calls_outside_dispatch(monkeypatch):
+    monkeypatch.delenv("LIVERY_WORKSPACE_ROOT", raising=False)
+    monkeypatch.delenv("LIVERY_TICKET_ID", raising=False)
+    monkeypatch.delenv("LIVERY_ASSIGNEE", raising=False)
+    out = tools.ticket_update("Should not be written.")
+    assert out.startswith("error: ticket_update is only available")
+
+
 def test_tool_schemas_is_openai_shaped():
     schemas = tools.tool_schemas()
     assert all(s["type"] == "function" for s in schemas)
     names = [s["function"]["name"] for s in schemas]
     assert "web_fetch" in names
     assert "web_search" in names
+    assert "ticket_update" in names

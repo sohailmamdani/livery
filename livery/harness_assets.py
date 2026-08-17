@@ -168,6 +168,22 @@ COMMAND_HARNESS_ASSETS: tuple[CommandHarnessAsset, ...] = (
         ),
     ),
     CommandHarnessAsset(
+        command="livery ticket update",
+        skill_name="livery-ticket-update",
+        description="Append a distilled update to a Livery ticket. Use while the CoS or a hired agent is actively working a ticket and reaches a meaningful milestone, decision, blocker, or result.",
+        summary="Keep the ticket Thread current with a concise work update.",
+        argument_hint="<ticket-id> --kind progress|decision|blocker|result --message update",
+        steps=(
+            "Identify the ticket, update kind, actor, and the concise information another person needs to understand what changed.",
+            "Run `livery ticket update <ticket-id> --actor <cos|agent-id> --kind <kind> --message \"...\" --format json`.",
+            "Confirm the update from the JSON and continue the work; do not create a standalone commit for every progress line.",
+        ),
+        notes=(
+            "Record meaningful outcomes, evidence, decisions, blockers, and next steps; do not paste raw logs or narrate every command.",
+            "Dispatch lifecycle events and final summaries are mirrored into the ticket automatically.",
+        ),
+    ),
+    CommandHarnessAsset(
         command="livery ticket close",
         skill_name="livery-ticket-close",
         description="Close or cancel a Livery ticket. Use only when the user explicitly asks to close, mark done, cancel, abandon, or wontfix a ticket.",
