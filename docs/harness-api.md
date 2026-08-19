@@ -44,6 +44,7 @@ livery status --format json
 livery agents --format json
 livery ticket new --title "..." --assignee cos --description "..." --format json
 livery ticket new --title "..." --assignee cos --repo api --description "..." --format json
+livery ticket new --title "..." --assignee dev --subagents encouraged --description "..." --format json
 livery ticket list --format json
 livery ticket list --repo api --format json
 livery ticket show <ticket-id> --format json
@@ -57,6 +58,7 @@ livery talk list --format json
 livery talk show <session> --format json
 livery dispatch prep <ticket-id> --worktree --format json
 livery dispatch fan-out <ticket-id> --to a,b --format json
+livery subagent run <ticket-id> --workspace <workspace> --parent-attempt <attempt-id> --role reviewer --task "..." --format json
 livery dispatch status --format json
 livery dispatch tail <query> --format json
 livery schedule new <id> --agent <id> --weekdays 18:00 --task "..." --format json

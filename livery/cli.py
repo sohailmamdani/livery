@@ -27,7 +27,12 @@ from .dispatch_view import (
     list_dispatches,
 )
 from .doctor import run_doctor
-from .hire import SUGGESTED_MODELS, SUPPORTED_RUNTIMES, hire_agent
+from .hire import (
+    SUGGESTED_MODELS,
+    SUPPORTED_RUNTIMES,
+    SUPPORTED_SUBAGENT_POLICIES,
+    hire_agent,
+)
 from .init import (
     SUPPORTED_COS_ENGINES,
     SkillCollisionResolution,
@@ -93,12 +98,14 @@ telegram_app = typer.Typer(no_args_is_help=True, help="Manage Telegram bot integ
 walkie_app = typer.Typer(no_args_is_help=True, help="Walkie-Talkie: turn-based debate between two AI sessions")
 memory_app = typer.Typer(no_args_is_help=True, help="Manage workspace memory")
 schedule_app = typer.Typer(no_args_is_help=True, help="Schedule recurring or one-shot agent work")
+subagent_app = typer.Typer(no_args_is_help=True, help="Run bounded advisory child agents")
 app.add_typer(ticket_app, name="ticket")
 app.add_typer(dispatch_app, name="dispatch")
 app.add_typer(telegram_app, name="telegram")
 app.add_typer(walkie_app, name="walkie")
 app.add_typer(memory_app, name="memory")
 app.add_typer(schedule_app, name="schedule")
+app.add_typer(subagent_app, name="subagent")
 
 
 @app.callback()
@@ -319,6 +326,9 @@ def _agent_payload(
         "cwd": _json_safe(post.get("cwd")),
         "reports_to": _json_safe(post.get("reports_to")),
         "hired": _json_safe(post.get("hired")),
+        "subagents": str(post.get("subagents") or "never"),
+        "max_subagents": _json_safe(post.get("max_subagents", 3)),
+        "max_subagent_depth": _json_safe(post.get("max_subagent_depth", 1)),
         "role": post.content.strip(),
         "path": str(path),
         "relative_path": _relative_path(path, root),
@@ -651,6 +661,11 @@ def ticket_new(
     repo: Optional[str] = typer.Option(None, "--repo", help="Linked repo id/name this ticket is about"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Paragraph stating the goal"),
     context: Optional[str] = typer.Option(None, "--context", help="Optional links/constraints/prior decisions"),
+    subagents: str = typer.Option(
+        "inherit",
+        "--subagents",
+        help="Delegation posture: inherit, never, allowed, or encouraged",
+    ),
     output_format: str = typer.Option(
         "text",
         "--format",
@@ -660,6 +675,11 @@ def ticket_new(
 ) -> None:
     """Create a new ticket."""
     output_format = _validate_output_format(output_format)
+    from .subagents import TICKET_POLICIES
+
+    if subagents not in TICKET_POLICIES:
+        typer.echo(f"--subagents must be one of: {', '.join(TICKET_POLICIES)}", err=True)
+        raise typer.Exit(1)
     resolution = resolve_workspace()
     root = resolution.workspace_root
     ticket_repo = repo.strip() if repo and repo.strip() else None
@@ -691,6 +711,7 @@ def ticket_new(
         "status": "open",
         "created": now,
         "updated": now,
+        "subagents": subagents,
     }
     if ticket_repo:
         metadata["repo"] = ticket_repo
@@ -1391,6 +1412,67 @@ def dispatch_prep(
     typer.echo()
     typer.echo("Run this (e.g. via Bash with run_in_background):")
     typer.echo(prep.command)
+
+
+@subagent_app.command("run")
+def subagent_run(
+    query: str = typer.Argument(..., help="Ticket id or unique filename fragment"),
+    parent_attempt: str = typer.Option(
+        ..., "--parent-attempt", help="Attempt id of the operating parent agent"
+    ),
+    role: str = typer.Option(..., "--role", help="Short specialist role for the child"),
+    task: str = typer.Option(..., "--task", help="Focused read-only task for the child"),
+    workspace: Optional[Path] = typer.Option(
+        None, "--workspace", help="Explicit workspace root when called from an agent repo"
+    ),
+    output_dir: Path = typer.Option(
+        Path("/tmp"), "--output-dir", help="Where to write child prompt and output files"
+    ),
+    output_format: str = typer.Option(
+        "text", "--format", "-f", help="Output format: text or json"
+    ),
+) -> None:
+    """Run one policy-checked, read-only advisory child and wait for its result."""
+    from .attempts import load_attempt
+    from .dispatch_runner import execute_prepared_dispatch
+    from .subagents import prepare_subagent_dispatch
+
+    output_format = _validate_output_format(output_format)
+    root = workspace.expanduser().resolve() if workspace else find_root()
+    path = _find_ticket(root, query)
+    try:
+        prep = prepare_subagent_dispatch(
+            root=root,
+            ticket_path=path,
+            parent_attempt_id=parent_attempt,
+            role=role,
+            task=task,
+            output_dir=output_dir,
+        )
+        execution = execute_prepared_dispatch(prep, workspace_root=root)
+        attempt = load_attempt(execution.attempt_path)
+    except (FileNotFoundError, NotImplementedError, OSError, ValueError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+    if output_format == "json":
+        _echo_json({
+            "subagent": {
+                "attempt": attempt.to_json_dict(),
+                "output_path": str(execution.output_path),
+                "exit_code": execution.exit_code,
+                "launched": execution.launched,
+            }
+        })
+    else:
+        typer.echo(f"subagent: {attempt.assignee}")
+        typer.echo(f"status:   {attempt.status.value}")
+        typer.echo(f"attempt:  {attempt.attempt_id}")
+        typer.echo(f"output:   {execution.output_path}")
+        for line in attempt.summary_excerpt:
+            typer.echo(line)
+    if execution.exit_code != 0:
+        raise typer.Exit(execution.exit_code)
 
 
 @dispatch_app.command("fan-out")
@@ -2272,6 +2354,17 @@ def hire(
     model: Optional[str] = typer.Option(None, "--model", "-m", help="Model id (runtime-specific)"),
     cwd: Optional[Path] = typer.Option(None, "--cwd", "-c", help="Directory the agent works in"),
     reports_to: Optional[str] = typer.Option(None, "--reports-to", help="Who the agent reports to (default: cos)"),
+    subagents: str = typer.Option(
+        "never",
+        "--subagents",
+        help=f"Hard delegation ceiling: {', '.join(SUPPORTED_SUBAGENT_POLICIES)}",
+    ),
+    max_subagents: int = typer.Option(
+        3, "--max-subagents", min=1, help="Maximum direct children per attempt"
+    ),
+    max_subagent_depth: int = typer.Option(
+        1, "--max-subagent-depth", min=1, help="Maximum child nesting depth"
+    ),
     force: bool = typer.Option(False, "--force", help="Overwrite existing agent directory"),
 ) -> None:
     """Scaffold a new agent under agents/<id>/.
@@ -2290,6 +2383,12 @@ def hire(
         runtime = _prompt_runtime(default=None)
     if runtime not in SUPPORTED_RUNTIMES:
         typer.echo(f"Unsupported runtime '{runtime}'.", err=True)
+        raise typer.Exit(1)
+    if subagents not in SUPPORTED_SUBAGENT_POLICIES:
+        typer.echo(
+            f"--subagents must be one of: {', '.join(SUPPORTED_SUBAGENT_POLICIES)}",
+            err=True,
+        )
         raise typer.Exit(1)
     if not model:
         suggested = SUGGESTED_MODELS.get(runtime)
@@ -2322,6 +2421,9 @@ def hire(
             reports_to=reports_to,
             role=role,
             hired=today,
+            subagents=subagents,
+            max_subagents=max_subagents,
+            max_subagent_depth=max_subagent_depth,
             overwrite=force,
         )
     except (FileExistsError, ValueError) as e:

@@ -160,6 +160,14 @@ def test_ticket_update_tool_rejects_calls_outside_dispatch(monkeypatch):
     assert out.startswith("error: ticket_update is only available")
 
 
+def test_subagent_tool_rejects_calls_outside_managed_dispatch(monkeypatch):
+    monkeypatch.delenv("LIVERY_WORKSPACE_ROOT", raising=False)
+    monkeypatch.delenv("LIVERY_TICKET_ID", raising=False)
+    monkeypatch.delenv("LIVERY_ATTEMPT_ID", raising=False)
+    out = tools.subagent_run("reviewer", "Review the plan.")
+    assert out.startswith("error: subagent_run is only available")
+
+
 def test_tool_schemas_is_openai_shaped():
     schemas = tools.tool_schemas()
     assert all(s["type"] == "function" for s in schemas)
@@ -167,3 +175,4 @@ def test_tool_schemas_is_openai_shaped():
     assert "web_fetch" in names
     assert "web_search" in names
     assert "ticket_update" in names
+    assert "subagent_run" in names

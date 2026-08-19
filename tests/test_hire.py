@@ -63,7 +63,49 @@ def test_hire_agent_frontmatter_fields(tmp_path):
     assert post.get("cwd") == "/tmp/branddb"
     assert post.get("reports_to") == "cos"
     assert post.get("hired") == "2026-04-20"
+    assert post.get("subagents") == "never"
+    assert post.get("max_subagents") == 3
+    assert post.get("max_subagent_depth") == 1
     assert "Drafts brand profiles" in post.content
+
+
+def test_hire_agent_can_allow_bounded_subagents(tmp_path):
+    root = _make_root(tmp_path)
+    hire_agent(
+        root=root,
+        agent_id="lead",
+        name="Lead",
+        runtime="codex",
+        model="gpt-5",
+        cwd="/tmp/x",
+        reports_to="cos",
+        role="Leads implementation.",
+        hired="2026-08-18",
+        subagents="allowed",
+        max_subagents=2,
+        max_subagent_depth=1,
+    )
+    post = frontmatter.load(root / "agents" / "lead" / "agent.md")
+    assert post.get("subagents") == "allowed"
+    assert post.get("max_subagents") == 2
+    assert post.get("max_subagent_depth") == 1
+
+
+def test_hire_agent_rejects_invalid_subagent_policy(tmp_path):
+    root = _make_root(tmp_path)
+    with pytest.raises(ValueError, match="Unsupported subagent policy"):
+        hire_agent(
+            root=root,
+            agent_id="lead",
+            name="Lead",
+            runtime="codex",
+            model="gpt-5",
+            cwd="/tmp/x",
+            reports_to="cos",
+            role="Leads implementation.",
+            hired="2026-08-18",
+            subagents="encouraged",
+        )
 
 
 def test_hire_agent_without_model_omits_field(tmp_path):

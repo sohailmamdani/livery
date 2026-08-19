@@ -110,9 +110,10 @@ CAPABILITIES: tuple[Capability, ...] = (
             "livery dispatch prep <ticket-id> --worktree",
             "livery dispatch prep <ticket-id> --worktree --format json",
             "livery dispatch fan-out <ticket-id> --to a,b --run",
+            "livery subagent run <ticket-id> --parent-attempt <attempt-id> --role <role> --task \"...\"",
         ),
         when="Use when work should happen outside the CoS session or in a project repo/worktree.",
-        agent_note="Dispatch only to hired agents; `assignee: cos` means the current CoS session owns it.",
+        agent_note="Dispatch only to hired agents; `assignee: cos` means the current CoS session owns it. Subagents require both agent-level permission and a non-never ticket posture, and must run through Livery.",
     ),
     Capability(
         id="dispatch-observe",

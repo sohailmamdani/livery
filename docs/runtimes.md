@@ -50,7 +50,7 @@ This is the question most new users ask, so it gets its own section.
 
 ### If your agent runs on `codex` / `claude_code` / `cursor`
 
-Livery contributes nothing to the tool layer. Your agent gets exactly the tools its harness ships with — file read/write, bash, web fetch, MCP servers, whatever the vendor has wired up. That's deliberate: the teams at Anthropic and OpenAI have put enormous work into their tool surfaces, and Livery has no business reinventing it.
+Livery leaves ordinary tool use to the harness: file read/write, bash, web fetch, MCP servers, and whatever else the vendor ships. Bounded delegation is the exception. When policy permits it, the dispatch prompt tells the parent to use `livery subagent run`; bypassing that with a harness-native delegation feature would lose Livery's limits and audit trail.
 
 If you want an agent to have access to, say, a specific MCP server, configure that in the harness's own config (e.g. `~/.claude/mcp.json` for Claude Code) — not in Livery.
 
@@ -59,10 +59,11 @@ If you want an agent to have access to, say, a specific MCP server, configure th
 There's no harness, so Livery provides a minimal built-in tool set from `livery/runtimes/tools.py`:
 
 - **`ticket_update(message, kind="progress")`** — append a concise milestone, decision, blocker, or result to the ticket bound to the current dispatch. The model cannot redirect it to another ticket or workspace.
+- **`subagent_run(role, task)`** — synchronously run one policy-checked, read-only specialist child bound to the current ticket and parent attempt.
 - **`web_fetch(url, max_chars=20000)`** — GET a URL, strip HTML, return text.
 - **`web_search(query, max_results=5)`** — DuckDuckGo HTML endpoint, returns a JSON list of results.
 
-The web tools use stdlib `urllib` with a 30-second timeout. There is no general filesystem tool, shell, or database access; the only write capability is the dispatch-bound ticket update. This is intentional scope: raw-LLM agents in Livery today are for research-style work, not engineering.
+The web tools use stdlib `urllib` with a 30-second timeout. There is no direct general filesystem tool, shell, or database access; the only direct write capability is the dispatch-bound ticket update. Advisory children may inspect through their configured runtime, but their prompt forbids edits. This is intentional scope: raw-LLM agents in Livery today are for research-style work, not engineering.
 
 Tool calls use a custom wire format (`<tool_call>{"name": "...", "arguments": {...}}</tool_call>`) parsed by Livery directly. See the docstring at the top of `livery/runtimes/lm_studio.py` for why we sidestep LM Studio's built-in tool-call path — in short, it fails silently under extended sessions.
 

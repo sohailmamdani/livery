@@ -45,9 +45,9 @@ def test_ticket_commands_emit_json_records(tmp_path, monkeypatch):
     assert ticket["title"] == "Define harness API"
     assert ticket["assignee"] == "cos"
     assert ticket["status"] == "open"
+    assert ticket["metadata"]["subagents"] == "inherit"
     assert ticket["relative_path"].startswith("tickets/")
     assert "structured command output" in ticket["content"]
-
     listed = runner.invoke(app, ["ticket", "list", "--format", "json"])
     assert listed.exit_code == 0, listed.stdout + listed.stderr
     listed_payload = json.loads(listed.stdout)
@@ -81,6 +81,24 @@ def test_ticket_commands_emit_json_records(tmp_path, monkeypatch):
     assert update_payload["update"]["kind"] == "decision"
     assert "— cos — decision" in update_payload["ticket"]["content"]
     assert "Use the CLI as the mutation boundary." in update_payload["ticket"]["content"]
+
+
+def test_ticket_new_records_explicit_subagent_posture(tmp_path, monkeypatch):
+    workspace = _workspace(tmp_path)
+    monkeypatch.chdir(workspace)
+    result = CliRunner().invoke(
+        app,
+        [
+            "ticket", "new",
+            "--title", "Delegate review",
+            "--assignee", "cos",
+            "--description", "Use specialists where helpful.",
+            "--subagents", "encouraged",
+            "--format", "json",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout)["ticket"]["metadata"]["subagents"] == "encouraged"
 
 
 def test_ticket_update_accepts_explicit_workspace_outside_repo(tmp_path, monkeypatch):

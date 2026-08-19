@@ -129,8 +129,8 @@ COMMAND_HARNESS_ASSETS: tuple[CommandHarnessAsset, ...] = (
         summary="Create a markdown ticket in the active Livery workspace.",
         argument_hint="[title or brief description]",
         steps=(
-            "Gather title, optional assignee, optional repo, description, and context.",
-            "Run `livery ticket new --title \"...\" [--assignee <id|cos>] [--repo <repo>] --description \"...\" [--context \"...\"] --format json`.",
+            "Gather title, optional assignee, optional repo, description, context, and the subagent posture (`inherit`, `never`, `allowed`, or `encouraged`).",
+            "Run `livery ticket new --title \"...\" [--assignee <id|cos>] [--repo <repo>] --description \"...\" [--context \"...\"] [--subagents <posture>] --format json`.",
             "Show the created ticket id, repo metadata when present, and relative path.",
         ),
         notes=(
@@ -240,6 +240,24 @@ COMMAND_HARNESS_ASSETS: tuple[CommandHarnessAsset, ...] = (
             "Apply a `--since-minutes` filter if the user asks for recent activity.",
             "Run `livery dispatch status [--since-minutes <N>] --format json`.",
             "Summarize attempts by status, assignee, ticket label, and useful failure details.",
+        ),
+    ),
+    CommandHarnessAsset(
+        command="livery subagent run",
+        skill_name="livery-subagent-run",
+        description="Run a bounded advisory child for an active Livery dispatch. Use only from an operating hired-agent dispatch when focused parallel inspection or review would improve the result.",
+        summary="Launch one policy-checked, read-only child and wait for its findings.",
+        argument_hint="<ticket-id> --parent-attempt <attempt-id> --role role --task task",
+        steps=(
+            "Confirm the parent prompt permits delegation and use its exact ticket id, workspace, and attempt id.",
+            "Choose a short specialist role and a focused inspection or analysis task that does not require edits.",
+            "Run `livery subagent run <ticket-id> --workspace <workspace> --parent-attempt <attempt-id> --role \"...\" --task \"...\" --format json`.",
+            "Read the child summary, verify useful claims as needed, and synthesize the findings into the parent's work.",
+        ),
+        notes=(
+            "The hired agent's `subagents` policy is a hard ceiling; ticket policy cannot override `never`.",
+            "Children are advisory and read-only. The parent owns all edits, verification, and final decisions.",
+            "Do not bypass this command with a harness-native untracked delegation feature.",
         ),
     ),
     CommandHarnessAsset(

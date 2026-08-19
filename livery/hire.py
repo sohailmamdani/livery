@@ -25,6 +25,7 @@ SUPPORTED_RUNTIMES: tuple[str, ...] = (
     "lm_studio",
     "ollama",
 )
+SUPPORTED_SUBAGENT_POLICIES: tuple[str, ...] = ("never", "allowed")
 
 
 # Model suggestions per runtime — offered as defaults in the wizard, not
@@ -81,6 +82,9 @@ def hire_agent(
     reports_to: str,
     role: str,
     hired: str,
+    subagents: str = "never",
+    max_subagents: int = 3,
+    max_subagent_depth: int = 1,
     overwrite: bool = False,
 ) -> list[Path]:
     """Scaffold an agent directory. Returns the list of files created.
@@ -92,6 +96,15 @@ def hire_agent(
         raise ValueError(
             f"Unsupported runtime '{runtime}'. Supported: {', '.join(SUPPORTED_RUNTIMES)}"
         )
+    if subagents not in SUPPORTED_SUBAGENT_POLICIES:
+        raise ValueError(
+            f"Unsupported subagent policy '{subagents}'. Supported: "
+            f"{', '.join(SUPPORTED_SUBAGENT_POLICIES)}"
+        )
+    if max_subagents < 1:
+        raise ValueError("max_subagents must be at least 1")
+    if max_subagent_depth < 1:
+        raise ValueError("max_subagent_depth must be at least 1")
 
     agent_dir = root / "agents" / agent_id
     agent_md = agent_dir / "agent.md"
@@ -113,6 +126,9 @@ def hire_agent(
         "cwd": cwd,
         "reports_to": reports_to,
         "hired": hired,
+        "subagents": subagents,
+        "max_subagents": max_subagents,
+        "max_subagent_depth": max_subagent_depth,
     }
     if model:
         metadata["model"] = model

@@ -185,6 +185,18 @@ class DispatchAttempt:
     trigger: str | None = None
     """Dispatch origin such as ``schedule`` or ``manual``; optional/additive."""
 
+    parent_attempt_id: str | None = None
+    """Parent dispatch attempt for a Livery-managed advisory child."""
+
+    root_assignee: str | None = None
+    """Hired agent whose runtime and delegation ceiling govern this attempt."""
+
+    subagent_role: str | None = None
+    """Short specialist role requested by the parent, when this is a child."""
+
+    delegation_depth: int = 0
+    """Zero for ordinary dispatches; incremented for each child generation."""
+
     def to_json_dict(self) -> dict[str, Any]:
         """Convert to the JSON-friendly dict written to disk."""
         d = asdict(self)
@@ -243,6 +255,10 @@ class DispatchAttempt:
             schedule_id=d.get("schedule_id"),
             scheduled_for=d.get("scheduled_for"),
             trigger=d.get("trigger"),
+            parent_attempt_id=d.get("parent_attempt_id"),
+            root_assignee=d.get("root_assignee"),
+            subagent_role=d.get("subagent_role"),
+            delegation_depth=int(d.get("delegation_depth", 0)),
         )
 
 

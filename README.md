@@ -136,7 +136,7 @@ livery link ~/companies/my-first-company --repo-id my-project --move-existing-wo
 
 # File a ticket, either for your CoS session ("cos") or a hired agent.
 # From a linked repo, Livery records repo metadata automatically.
-livery ticket new --title "Draft the homepage copy" --assignee cos
+livery ticket new --title "Draft the homepage copy" --assignee cos --subagents inherit
 
 # See what's on the board
 livery ticket list
@@ -242,7 +242,7 @@ Livery dispatches work to external runtimes. Supported:
 - **lm_studio** (or `mlx`) — LM Studio local server (HTTP)
 - **ollama** — Ollama local server (HTTP, OpenAI-compatible)
 
-**Tool use.** For the CLI-harness runtimes (codex, claude_code, cursor), Livery delegates tool use entirely to the harness — your agent gets whatever file, bash, web, and MCP tools the harness ships with. For the raw-LLM runtimes (lm_studio, ollama) there's no harness, so Livery runs its own agent loop with a minimal built-in tool set (`web_fetch`, `web_search`). See `docs/runtimes.md` for details.
+**Tool use.** For the CLI-harness runtimes (codex, claude_code, cursor), Livery delegates ordinary tool use to the harness. Livery-managed delegation still goes through `livery subagent run` so child attempts are bounded and audited. For the raw-LLM runtimes (lm_studio, ollama), Livery runs its own loop with `web_fetch`, `web_search`, dispatch-bound `ticket_update`, and dispatch-bound `subagent_run` tools. See `docs/runtimes.md` for details.
 
 Declare an agent's runtime in `agents/<id>/agent.md`:
 
@@ -256,6 +256,9 @@ effort: high
 cwd: /Users/me/code/my-content-repo
 reports_to: cos
 hired: 2026-04-20
+subagents: allowed
+max_subagents: 3
+max_subagent_depth: 1
 ---
 ```
 
@@ -313,6 +316,32 @@ Updates are locked so fan-out agents cannot overwrite one another. They should
 capture outcomes, evidence, decisions, and next steps—not raw logs or every
 tool call. When the agent finishes, review the ticket and close it with
 `livery ticket close`.
+
+### Bounded subagents
+
+Delegation uses two layers. Hiring sets the hard ceiling in `agent.md`:
+`subagents` is `never` (the default) or `allowed`, with explicit child-count
+and depth limits. Each ticket then chooses `inherit`, `never`, `allowed`, or
+`encouraged` with `livery ticket new --subagents <posture>`. A ticket can
+narrow authority but cannot override an agent-level `never`.
+
+When effective policy permits it, the parent dispatch prompt includes the
+exact command and parent attempt id needed to run a child:
+
+```sh
+livery subagent run <ticket-id> \
+  --workspace <workspace> \
+  --parent-attempt <attempt-id> \
+  --role "security reviewer" \
+  --task "Inspect the proposed change for authorization gaps." \
+  --format json
+```
+
+Children are synchronous, read-only advisers. They can inspect and report but
+cannot own edits; the parent remains responsible for implementation,
+verification, and synthesis. Every child is a normal durable attempt with
+`parent_attempt_id`, `root_assignee`, `subagent_role`, and
+`delegation_depth`, and its lifecycle is mirrored into the ticket Thread.
 
 To run **the same ticket against multiple agents in parallel** — e.g. to triangulate a research output across two different models — use fan-out:
 

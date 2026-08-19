@@ -91,6 +91,7 @@ def compose_prompt(
     ticket_id: str,
     workspace_root: Path | None = None,
     ticket_path: Path | None = None,
+    delegation_block: str = "",
 ) -> str:
     """Build the dispatch prompt from the agent's AGENTS.md + the ticket markdown."""
     lines = [
@@ -115,6 +116,8 @@ def compose_prompt(
             ).rstrip(),
             "",
         ])
+    if delegation_block:
+        lines.extend([delegation_block.rstrip(), ""])
     lines.extend([
         DISPATCH_SUMMARY_BLOCK.format(ticket_id=ticket_id).rstrip(),
         "",
@@ -130,6 +133,44 @@ def compose_prompt(
     return "\n".join(lines)
 
 
+def compose_subagent_prompt(
+    *,
+    assignee: str,
+    role: str,
+    task: str,
+    agents_md: str,
+    ticket_md: str,
+    ticket_id: str,
+) -> str:
+    """Build a deliberately read-only prompt for an advisory child."""
+    return f"""You are an advisory Livery subagent supporting the hired agent \"{assignee}\".
+
+Specialist role: {role}
+Focused task: {task}
+
+You may inspect files, run read-only searches, and reason about the ticket.
+Do not edit files, update the ticket, install dependencies, commit, push, or
+launch untracked subagents. Return concise findings and recommendations to the
+parent, which alone owns implementation and synthesis.
+
+---BEGIN PARENT AGENTS.md---
+
+{agents_md.rstrip()}
+
+---END PARENT AGENTS.md---
+
+{DISPATCH_SUMMARY_BLOCK.format(ticket_id=ticket_id).rstrip()}
+
+---BEGIN TICKET---
+
+{ticket_md.rstrip()}
+
+---END TICKET---
+
+Investigate only the focused task and report back.
+"""
+
+
 def build_runtime_command(
     *,
     runtime: str,
@@ -141,6 +182,7 @@ def build_runtime_command(
     workspace_root: Path | None = None,
     assignee: str | None = None,
     ticket_id: str | None = None,
+    attempt_id: str | None = None,
 ) -> str:
     """Return the shell command to launch the runtime with the composed prompt.
 
@@ -212,6 +254,8 @@ def build_runtime_command(
                 f"LIVERY_ASSIGNEE={assignee}",
                 f"LIVERY_TICKET_ID={ticket_id}",
             ])
+            if attempt_id:
+                parts.append(f"LIVERY_ATTEMPT_ID={attempt_id}")
         parts.extend([
             "uv", "run", "--directory", livery_root,
             "python", "-m", "livery.runtimes.lm_studio",
@@ -313,6 +357,11 @@ def prepare_dispatch(
     if not cwd:
         raise ValueError(f"Agent '{assignee}' has no cwd in agent.md")
 
+    from .subagents import parent_prompt_block, resolve_policy
+
+    delegation_policy = resolve_policy(agent_post, ticket_post)
+    attempt_id = attempt_id_for(ticket_id, str(assignee))
+
     actual_cwd = str(cwd)
     worktree_path: Path | None = None
     if make_worktree:
@@ -334,6 +383,12 @@ def prepare_dispatch(
         ticket_id=ticket_id,
         workspace_root=root,
         ticket_path=ticket_path,
+        delegation_block=parent_prompt_block(
+            policy=delegation_policy,
+            ticket_id=ticket_id,
+            workspace_root=root,
+            attempt_id=attempt_id,
+        ),
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -353,6 +408,7 @@ def prepare_dispatch(
         workspace_root=root,
         assignee=str(assignee),
         ticket_id=ticket_id,
+        attempt_id=attempt_id,
     )
 
     # Write the attempt record. This is the durable metadata the rest of
@@ -362,7 +418,7 @@ def prepare_dispatch(
     # is updated by the caller in `--run` mode.
     attempt = DispatchAttempt(
         schema_version=SCHEMA_VERSION,
-        attempt_id=attempt_id_for(ticket_id, str(assignee)),
+        attempt_id=attempt_id,
         ticket_id=ticket_id,
         assignee=str(assignee),
         runtime=runtime,
@@ -383,6 +439,7 @@ def prepare_dispatch(
         summary_excerpt=[],
         hooks={},
         hook_warnings=[],
+        root_assignee=str(assignee),
     )
     attempt_path = write_attempt(attempt, root)
 

@@ -156,6 +156,18 @@ you, not the intern-compliance version.
 - Livery mirrors dispatch lifecycle events and final summaries into the
   ticket automatically. Attempt JSON remains the detailed machine audit log.
 
+## Delegation
+
+- Hiring sets the hard delegation ceiling in `agent.md`: `subagents: never`
+  is the default; `subagents: allowed` may be paired with `max_subagents` and
+  `max_subagent_depth`.
+- Tickets choose the work-specific posture with `subagents: inherit`, `never`,
+  `allowed`, or `encouraged`. A ticket can narrow an agent's authority but
+  cannot override an agent-level `never`.
+- Dispatched parents must launch children through `livery subagent run`, never
+  through an untracked harness-native delegation feature. Children are
+  read-only advisers; the parent owns edits, verification, and synthesis.
+
 ## Workspace memory
 
 - Durable decisions, lessons, and preferences belong in `memory/`, not in
@@ -250,7 +262,8 @@ Steps:
    - **repo** (optional) — linked repo id/name when the ticket is about a project repo
    - **description** — one paragraph stating the goal
    - **context** (optional) — links, constraints, prior decisions
-2. Run `livery ticket new --title "..." --assignee <id|cos> [--repo <repo>] --description "..." [--context "..."] --format json`.
+   - **subagents** — `inherit` (default), `never`, `allowed`, or `encouraged`
+2. Run `livery ticket new --title "..." --assignee <id|cos> [--repo <repo>] --description "..." [--context "..."] [--subagents <posture>] --format json`.
    If assignee is blank, omit `--assignee`.
 3. Show the user the created ticket id and relative path from the JSON.
 """
@@ -335,11 +348,12 @@ Livery tracks work as markdown tickets in `tickets/<YYYY-MM-DD>-<NNN>-<slug>.md`
 - **repo** (optional) — linked repo id/name when the ticket is about a project repo
 - **description** — one paragraph stating the goal
 - **context** (optional) — links, constraints, prior decisions
+- **subagents** — `inherit` (default), `never`, `allowed`, or `encouraged`
 
 ## Steps
 
 1. Gather missing fields conversationally.
-2. Run `livery ticket new --title "..." --assignee <id|cos> [--repo <repo>] --description "..." [--context "..."] --format json`.
+2. Run `livery ticket new --title "..." --assignee <id|cos> [--repo <repo>] --description "..." [--context "..."] [--subagents <posture>] --format json`.
    If assignee is blank, omit `--assignee`.
 3. Show the created ticket id and relative path from the JSON.
 """

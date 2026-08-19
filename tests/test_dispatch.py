@@ -186,6 +186,7 @@ def test_build_runtime_command_lm_studio(tmp_path):
         workspace_root=tmp_path / "livery workspace",
         assignee="research",
         ticket_id="2026-08-17-001-research",
+        attempt_id="attempt-123",
     )
     # lm_studio adapter uses `uv run --directory <livery root>` so python
     # resolves the import regardless of the agent's declared cwd.
@@ -195,6 +196,7 @@ def test_build_runtime_command_lm_studio(tmp_path):
     assert "LIVERY_WORKSPACE_ROOT=" in cmd
     assert "LIVERY_ASSIGNEE=research" in cmd
     assert "LIVERY_TICKET_ID=2026-08-17-001-research" in cmd
+    assert "LIVERY_ATTEMPT_ID=attempt-123" in cmd
     assert f"< {prompt}" in cmd
     assert f"> {output}" in cmd
 

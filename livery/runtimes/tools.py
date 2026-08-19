@@ -181,12 +181,73 @@ def ticket_update(message: str, kind: str = "progress") -> str:
     })
 
 
+def subagent_run(role: str, task: str) -> str:
+    """Run a policy-checked advisory child bound to the current dispatch."""
+    workspace_raw = os.environ.get("LIVERY_WORKSPACE_ROOT")
+    ticket_id = os.environ.get("LIVERY_TICKET_ID")
+    parent_attempt_id = os.environ.get("LIVERY_ATTEMPT_ID")
+    if not workspace_raw or not ticket_id or not parent_attempt_id:
+        return "error: subagent_run is only available inside a managed ticket dispatch"
+
+    from livery.attempts import load_attempt
+    from livery.dispatch_runner import execute_prepared_dispatch
+    from livery.subagents import prepare_subagent_dispatch
+    from livery.ticket_updates import find_ticket_path
+
+    root = Path(workspace_raw).expanduser().resolve()
+    try:
+        prep = prepare_subagent_dispatch(
+            root=root,
+            ticket_path=find_ticket_path(root, ticket_id),
+            parent_attempt_id=parent_attempt_id,
+            role=role,
+            task=task,
+            output_dir=Path("/tmp"),
+        )
+        execution = execute_prepared_dispatch(prep, workspace_root=root)
+        attempt = load_attempt(execution.attempt_path)
+    except (FileNotFoundError, NotImplementedError, OSError, ValueError) as exc:
+        return f"error: could not run subagent ({exc})"
+    return json.dumps({
+        "attempt_id": attempt.attempt_id,
+        "status": attempt.status.value,
+        "exit_code": execution.exit_code,
+        "summary_excerpt": attempt.summary_excerpt,
+        "output_path": str(execution.output_path),
+    })
+
+
 # ---------------------------------------------------------------------------
 # Registry + OpenAI-style schemas
 # ---------------------------------------------------------------------------
 
 
 TOOLS: dict[str, Tool] = {
+    "subagent_run": Tool(
+        name="subagent_run",
+        schema={
+            "type": "function",
+            "function": {
+                "name": "subagent_run",
+                "description": "Run a bounded read-only specialist child for the current ticket. The parent remains responsible for edits and synthesis.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "role": {
+                            "type": "string",
+                            "description": "Short specialist role, such as security-reviewer.",
+                        },
+                        "task": {
+                            "type": "string",
+                            "description": "Focused inspection or analysis task for the child.",
+                        },
+                    },
+                    "required": ["role", "task"],
+                },
+            },
+        },
+        run=subagent_run,
+    ),
     "ticket_update": Tool(
         name="ticket_update",
         schema={

@@ -4,6 +4,11 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Added
+- Bounded subagent delegation for hired agents. Agent frontmatter sets the hard `never`/`allowed` ceiling plus child-count and depth limits; tickets select `inherit`, `never`, `allowed`, or `encouraged` with `livery ticket new --subagents`.
+- `livery subagent run` launches synchronous advisory children through the configured runtime. Child attempts carry parent, root-agent, role, depth, and trigger metadata, reuse normal lifecycle and ticket-thread updates, and leave edits and synthesis to the parent.
+- Dispatch prompts, raw LM Studio/Ollama tools, capability discovery, and managed Claude/Codex command assets expose the audited delegation path and warn against untracked harness-native delegation.
+
 ## 0.21.0 — 2026-08-17
 
 ### Added
