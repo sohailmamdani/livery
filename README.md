@@ -74,10 +74,10 @@ livery upgrade-workspace --apply  # write the proposed updates
 ### Pinning to a specific version (advanced)
 
 ```sh
-uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.21.0' livery
+uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.22.0' livery
 ```
 
-**Important caveat:** pinning with `@v0.21.0` (or any git ref) makes `uv tool upgrade livery` a no-op forever — uv re-resolves the same pinned ref each time and concludes nothing has changed. To move a pinned install to a newer version, you have to reinstall with the new tag (or drop the pin entirely):
+**Important caveat:** pinning with `@v0.22.0` (or any git ref) makes `uv tool upgrade livery` a no-op forever — uv re-resolves the same pinned ref each time and concludes nothing has changed. To move a pinned install to a newer version, you have to reinstall with the new tag (or drop the pin entirely):
 
 ```sh
 # move the pin forward when a newer tag exists
