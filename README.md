@@ -74,10 +74,10 @@ livery upgrade-workspace --apply  # write the proposed updates
 ### Pinning to a specific version (advanced)
 
 ```sh
-uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.22.0' livery
+uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.23.0' livery
 ```
 
-**Important caveat:** pinning with `@v0.22.0` (or any git ref) makes `uv tool upgrade livery` a no-op forever — uv re-resolves the same pinned ref each time and concludes nothing has changed. To move a pinned install to a newer version, you have to reinstall with the new tag (or drop the pin entirely):
+**Important caveat:** pinning with `@v0.23.0` (or any git ref) makes `uv tool upgrade livery` a no-op forever — uv re-resolves the same pinned ref each time and concludes nothing has changed. To move a pinned install to a newer version, you have to reinstall with the new tag (or drop the pin entirely):
 
 ```sh
 # move the pin forward when a newer tag exists
@@ -471,13 +471,49 @@ livery upgrade-workspace          # dry run — shows what would change
 livery upgrade-workspace --apply  # actually write changes
 ```
 
-Hard guardrails: it leaves agents, tickets, existing memory entries, custom
+Hard guardrails: it leaves existing agents, tickets, existing memory entries, custom
 harness files, and text outside the `LIVERY-MANAGED` convention blocks alone.
 It can add missing scaffolding (including `schedules/`) and create or refresh
-Livery-owned slash commands and skills. The one `livery.toml` exception is an
-additive, one-time `cos_engines` migration for legacy workspaces. Safe to run
+Livery-owned slash commands and skills. Configuration migrations add missing
+`cos_engines` and `default_agent` keys while preserving existing values and comments.
+The default-agent migration creates `agents/cos/` only when absent, or reuses
+an existing complete CoS definition. Safe to run
 after every `uv tool upgrade livery`; use `--force` only when you explicitly
 want customized shipped command or skill files overwritten.
+
+### Chief of Staff at chat startup
+
+New workspaces select `default_agent = "cos"`. Customize its name and role in
+`agents/cos/agent.md`, and its persona, responsibilities, and working instructions
+in `agents/cos/AGENTS.md`. To select another existing agent as Chief of Staff,
+set `default_agent` to that agent's directory ID in `livery.toml`.
+
+The workspace's managed harness instructions require initialization before the
+first substantive reply. `livery session-brief` supplies the selected agent's
+instructions, workspace purpose and custom conventions, current team roster,
+and ticket status. Installed startup hooks supply the same brief automatically.
+Explicit worker assignments retain their own identity, including Talk,
+Walkie-Talkie, schedules, and advisory children. Selecting an identity does not
+change the chat's running model or grant access to previous conversations.
+
+Upgrades also refresh startup instructions in registered linked repositories,
+preserving project rules. Older links are not automatically discoverable: run
+the upgrade from each linked repo, or name them explicitly:
+
+```sh
+livery upgrade-workspace --linked-repo ~/code/project-one --linked-repo ~/code/project-two
+livery upgrade-workspace --linked-repo ~/code/project-one --linked-repo ~/code/project-two --apply
+```
+
+New links are recorded in the workspace's local `.livery/linked-repos.json`
+index. Missing or reassigned links are skipped. Preview the complete plan before
+applying; invalid default-agent definitions stop the upgrade without writes.
+
+This initializes harness sessions that load project convention files or Livery
+startup hooks, including host-backed sessions accessed from mobile. It does not
+configure cloud ChatGPT project instructions automatically. A cloud project
+needs its CoS instructions and workspace context supplied through that project's
+own instructions/sources; a local filesystem path is insufficient.
 
 ## Sync convention files
 

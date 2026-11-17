@@ -38,7 +38,9 @@ livery: managed
 Help the user start from live Livery linked-repo context.
 
 Steps:
-1. Run `livery session-brief --format json`.
+1. Run `livery session-brief --format json`. Follow its `agent_instruction`,
+   including the configured identity and custom instructions. Explicit named-agent
+   assignments retain their own identity and restrictions.
 2. Confirm `resolution.kind` is `linked-repo`. If it is not, say so plainly
    and continue with the normal Livery workspace flow.
 3. Briefly tell the user:
@@ -158,7 +160,9 @@ context.
 
 ## Steps
 
-1. Run `livery session-brief --format json`.
+1. Run `livery session-brief --format json`. Follow its `agent_instruction`,
+   including the configured identity and custom instructions. Explicit named-agent
+   assignments retain their own identity and restrictions.
 2. Confirm `resolution.kind` is `linked-repo`. If it is not, say so plainly
    and continue with the normal Livery workspace flow.
 3. Briefly tell the user:
@@ -355,6 +359,18 @@ def install_linked_repo_assets(
     repo_root = repo_root.resolve()
     selected = parse_linked_repo_engines(engines)
     results: list[LinkedRepoAssetResult] = []
+
+    from .identity import linked_session_content
+    for engine, filename in (("codex", "AGENTS.md"), ("claude_code", "CLAUDE.md")):
+        if engine not in selected:
+            continue
+        path = repo_root / filename
+        current = path.read_text() if path.exists() else ""
+        fresh = linked_session_content(current)
+        if fresh != current:
+            path.write_text(fresh)
+        results.append(LinkedRepoAssetResult(engine, path, "updated" if fresh != current else "unchanged",
+                                            "Maintained session identity instructions; preserved project content."))
 
     if "claude_code" in selected:
         for name, content in (

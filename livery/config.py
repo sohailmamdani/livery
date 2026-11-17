@@ -27,6 +27,7 @@ class WorkspaceConfig:
     name: str = "unnamed-workspace"
     description: str = ""
     default_runtime: str | None = None
+    default_agent: str | None = None
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
     raw: dict = field(default_factory=dict)
 
@@ -50,6 +51,7 @@ def load(root: Path | None = None) -> WorkspaceConfig:
         name=raw.get("name", "unnamed-workspace"),
         description=raw.get("description", ""),
         default_runtime=raw.get("default_runtime"),
+        default_agent=raw.get("default_agent"),
         telegram=telegram,
         raw=raw,
     )

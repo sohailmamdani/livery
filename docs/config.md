@@ -24,6 +24,7 @@ description = "What this workspace is for"
 name = "my-workspace"                      # string (default: "unnamed-workspace")
 description = "One-line description"       # string (default: "")
 default_runtime = "claude_code"            # string | unset — one of codex, claude_code, cursor, lm_studio, ollama
+default_agent = "cos"                     # existing agent ID used as Chief of Staff in user chats
 cos_engines = ["claude_code", "codex"]     # list of CoS engines this workspace targets
 
 [telegram]
@@ -51,6 +52,21 @@ One-liner shown in generated CoS convention file(s). Purely informational.
 If set, subcommands that would otherwise require a runtime choice can fall back to this. Useful when your workspace is dominated by one stack. Leave unset to force explicit choices.
 
 Valid values: `codex`, `claude_code`, `cursor`, `lm_studio`, `ollama`.
+
+#### `default_agent` (string, optional)
+
+Selects the Chief of Staff for new user conversations in this workspace and its
+linked repos. It references `agents/<id>/agent.md` (name and role) and
+`agents/<id>/AGENTS.md` (custom instructions). New workspaces create and select
+`cos`; `upgrade-workspace --apply` adds the same setup to older workspaces.
+Existing definitions and explicit selections are preserved, including under
+`--force`. An incomplete existing `cos` directory or invalid explicit selection
+must be repaired before migration. `livery doctor` reports invalid selections.
+
+`session-brief` resolves this setting on every invocation, so edits take effect
+on the next initialization. Existing chats do not switch identity automatically.
+Runtime/model fields configure separately launched work, not the current chat.
+`assignee: cos` tickets still belong to the current CoS session.
 
 #### `cos_engines` (list of strings, optional)
 

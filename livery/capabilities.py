@@ -7,6 +7,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .identity import session_identity
+
 from .paths import WORKSPACE_MARKER, WorkspaceResolution, resolve_workspace
 from .status import (
     DEFAULT_RECENT_CLOSED_LIMIT,
@@ -307,7 +309,7 @@ def next_steps(start: Path | None = None) -> dict[str, object]:
             }
         )
 
-    agent_files = list((workspace / "agents").glob("*/agent.md"))
+    agent_files = [p for p in (workspace / "agents").glob("*/agent.md") if p.parent.name != "cos"]
     if not agent_files:
         suggestions.append(
             {
@@ -493,12 +495,38 @@ def session_brief(start: Path | None = None) -> dict[str, object]:
             "framework-repo compatibility marker, not a normal user workspace."
         )
 
+    identity: dict[str, object] = {}
+    if kind != "legacy-workspace":
+        try:
+            identity = session_identity(resolution.workspace_root)
+            agent = identity.get("agent")
+            if identity.get("identity_source") == "assignment":
+                acknowledgement = (
+                    f"You have an explicit assignment as {identity['assigned_agent']}. "
+                    "Keep the identity, instructions, and restrictions in your assigned prompt. "
+                    "Do not adopt the workspace's default Chief of Staff."
+                )
+            elif isinstance(agent, dict):
+                acknowledgement += (
+                    f" You are {agent['name']} ({agent['id']}): {agent['role']} "
+                    "Follow the supplied agent instructions and workspace conventions. "
+                    "Briefly introduce your name and role on the first reply. "
+                    "If this session has an explicit named-agent assignment, keep that "
+                    "identity and its task restrictions instead of adopting the default."
+                )
+            else:
+                acknowledgement += " No default agent configured; run `livery upgrade-workspace` to preview setup."
+        except (ValueError, RuntimeError, OSError) as exc:
+            identity = {"identity_error": str(exc), "agent": None}
+            acknowledgement = f"Cannot initialize session identity: {exc}. Report this problem; do not invent or assume a default agent."
+
     return {
         "cwd": str(cwd),
         "is_livery_aware": True,
         "resolution": _workspace_summary(resolution),
         "status": status,
         "agent_instruction": acknowledgement,
+        **identity,
         "discovery_commands": {
             "context": "livery next --format json",
             "full_menu": "livery capabilities --format json",
@@ -527,6 +555,22 @@ def render_session_brief_text(start: Path | None = None) -> str:
     if resolution.get("repo_id"):
         lines.append(f"Repo id: {resolution['repo_id']}")
     lines.extend(["", f"Agent instruction: {data['agent_instruction']}"])
+
+    agent = data.get("agent")
+    if isinstance(agent, dict):
+        lines.extend(["", f"## Agent: {agent['name']} ({agent['id']})",
+                      f"Role: {agent['role']}", "", str(agent['instructions'])])
+    workspace = data.get("workspace")
+    if isinstance(workspace, dict):
+        lines.extend(["", f"Workspace purpose: {workspace['name']} — {workspace['description']}"])
+    for convention in data.get("workspace_instructions", []):
+        lines.extend(["", f"## Workspace instructions ({convention['path']})", convention['instructions']])
+    team = data.get("team")
+    if isinstance(team, list):
+        lines.extend(["", "## Team"])
+        for member in team:
+            lines.append(f"- {member['id']}: {member.get('name', '')} — {member.get('role', member.get('error', ''))}")
+        lines.append("Consult via `livery talk <id>`; assign work via tickets and explicit dispatch.")
 
     status = data.get("status")
     if isinstance(status, dict):

@@ -167,7 +167,9 @@ def _list_agents(root: Path) -> list[str]:
 def _check_agents(root: Path) -> bool:
     """Return True if agents exist (or were just hired), False if user declined."""
     _section("Step 3 of 3: Agents")
-    existing = _list_agents(root)
+    existing = [agent for agent in _list_agents(root) if agent != "cos"]
+    if (root / "agents/cos/agent.md").is_file():
+        _ok("Chief of Staff configured; customize agents/cos/AGENTS.md for its persona and remit.")
     if existing:
         _ok(f"{len(existing)} agent(s) hired: {', '.join(existing)}")
         return True

@@ -117,6 +117,8 @@ def test_prepare_walkie_turn_writes_prompt_and_attempt(tmp_path):
 
     # Prompt lives under the workspace, not /tmp
     assert prep.prompt_path.is_file()
+    assert "LIVERY_ACTIVE_AGENT=critic" in prep.command
+    assert f"LIVERY_ACTIVE_WORKSPACE={root}" in prep.command
     assert ".livery/walkie-talkie/prompts" in str(prep.prompt_path)
     prompt = prep.prompt_path.read_text()
     assert "critic" in prompt

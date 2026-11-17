@@ -8,9 +8,9 @@ update the framework-managed parts only.
 
 Hard guardrails:
 
-- **Never touches user content.** `livery.toml`, `agents/`, `tickets/`,
-  and the user-editable sections of CLAUDE.md / AGENTS.md (everything
-  outside the LIVERY-MANAGED markers) are off-limits regardless.
+- **Preserves user content.** Adds missing top-level configuration keys and
+  a create-only Chief of Staff definition. Existing agent files, tickets,
+  and convention text outside managed markers are never rewritten.
 - **Dry-run by default.** Pass `--apply` to actually write changes.
 - **Skill files only created if missing by default.** Existing skill files
   aren't overwritten unless `--force` is passed — users may have customized
@@ -31,6 +31,7 @@ The framework-managed parts are:
 from __future__ import annotations
 
 import tomllib
+import json
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -74,6 +75,9 @@ from .init import (
     WALKIE_SLASH,
 )
 from .memory import memory_scaffold_paths, validate_memory_scaffold
+from .identity import chief_of_staff_files, load_identity, linked_session_content
+from .paths import resolve_workspace, registered_linked_repos
+from .paths_safety import assert_path_contained
 
 
 class Action(Enum):
@@ -81,7 +85,7 @@ class Action(Enum):
     CREATE = "create"      # file missing → write fresh
     REFRESH = "refresh"    # managed block exists but content drifted → rewrite block only
     INSERT = "insert"      # convention file exists with no markers → prepend a managed block
-    MIGRATE = "migrate"    # legacy livery.toml gets a `cos_engines` field appended
+    MIGRATE = "migrate"    # additive workspace configuration migration
     WARN = "warn"          # framework-managed file customized; skip without --force
 
 
@@ -316,7 +320,7 @@ def _plan_schedule_scaffold(root: Path) -> list[PlanItem]:
     ]
 
 
-def compute_plan(root: Path) -> UpgradePlan:
+def compute_plan(root: Path, linked_repos: list[Path] | None = None) -> UpgradePlan:
     """Build the full upgrade plan for `root`. Pure: no file writes."""
     engine_ids, name, description, is_legacy = _read_workspace_meta(root)
     items: list[PlanItem] = []
@@ -326,6 +330,29 @@ def compute_plan(root: Path) -> UpgradePlan:
     toml_path = root / "livery.toml"
     if is_legacy and toml_path.is_file():
         items.append(_plan_toml_migration(toml_path, engine_ids))
+
+    if toml_path.is_file():
+        raw = tomllib.loads(toml_path.read_text())
+        if "default_agent" in raw:
+            # A broken explicit choice must be repaired, not silently replaced.
+            load_identity(root, raw["default_agent"])
+        else:
+            if (root / "agents/cos").exists():
+                load_identity(root, "cos")
+            else:
+                runtime = raw.get("default_runtime") or ("claude_code" if engine_ids[0] == "claude_code" else "codex")
+                for path, content in chief_of_staff_files(root, name, runtime).items():
+                    assert_path_contained(path, root)
+                    items.append(PlanItem(path, Action.CREATE, "create editable Chief of Staff definition", content))
+            # Prepend a root key; preserve tables, comments, and any engine migration.
+            existing = next((item for item in items if item.path == toml_path), None)
+            body = existing.new_content if existing else toml_path.read_text()
+            body = 'default_agent = "cos"\n' + body
+            if existing:
+                existing.new_content = body
+                existing.reason += "; select default Chief of Staff"
+            else:
+                items.append(PlanItem(toml_path, Action.MIGRATE, "select default Chief of Staff", body))
 
     convention_filenames = convention_files_for(engine_ids)
     convention_paths = [root / fn for fn in convention_filenames]
@@ -400,6 +427,31 @@ def compute_plan(root: Path) -> UpgradePlan:
 
     items.extend(_plan_memory_scaffold(root))
     items.extend(_plan_schedule_scaffold(root))
+
+    registry = root / ".livery" / "linked-repos.json"
+    known = registered_linked_repos(root)
+    repos = {Path(p).resolve() for p in known}
+    repos.update(p.resolve() for p in (linked_repos or []))
+    valid = set(known)
+    for repo in sorted(repos):
+        try:
+            resolution = resolve_workspace(repo)
+            if (resolution.kind != "linked-repo" or resolution.linked_repo_root != repo
+                    or resolution.workspace_root != root.resolve()):
+                raise ValueError("repo no longer links to this workspace")
+        except (RuntimeError, ValueError) as exc:
+            items.append(PlanItem(repo, Action.WARN, f"cannot refresh linked repo: {exc}"))
+            continue
+        valid.add(str(repo))
+        for filename in convention_files_for(engine_ids):
+            path = repo / filename
+            current = path.read_text() if path.exists() else ""
+            fresh = linked_session_content(current)
+            items.append(PlanItem(path, Action.SKIP if fresh == current else Action.REFRESH,
+                                  "refresh linked-repo session identity; preserve project instructions", fresh))
+    if valid != set(known):
+        items.append(PlanItem(registry, Action.MIGRATE, "register validated links for subsequent upgrades",
+                              json.dumps(sorted(valid), indent=2) + "\n"))
 
     return UpgradePlan(workspace_root=root, cos_engines=engine_ids, items=items)
 

@@ -96,6 +96,8 @@ def test_run_talk_turn_appends_transcript_and_prompt(tmp_path, monkeypatch):
 
     assert result.ok
     assert result.session_id == "api-plan"
+    assert "LIVERY_ACTIVE_AGENT=web-swe" in calls[0][0]
+    assert f"LIVERY_ACTIVE_WORKSPACE={root}" in calls[0][0]
     assert result.reply == "I would make this a ticket before editing."
     assert calls and calls[0][2] == 30
     transcript = result.transcript_path.read_text()

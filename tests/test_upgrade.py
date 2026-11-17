@@ -45,7 +45,7 @@ def test_compute_plan_creates_missing_convention_file(tmp_path):
     (root / "AGENTS.md").unlink()
 
     plan = compute_plan(root)
-    agents_item = next(i for i in plan.items if i.path.name == "AGENTS.md")
+    agents_item = next(i for i in plan.items if i.path == root / "AGENTS.md")
     assert agents_item.action == Action.CREATE
     assert MANAGED_BEGIN in agents_item.new_content
     # When a sibling exists, the new file mirrors it instead of using the bare template
@@ -67,7 +67,7 @@ def test_create_mirrors_user_content_from_sibling(tmp_path):
     (root / "livery.toml").write_text(toml_text)
 
     plan = compute_plan(root)
-    agents_item = next(i for i in plan.items if i.path.name == "AGENTS.md")
+    agents_item = next(i for i in plan.items if i.path == root / "AGENTS.md")
     assert agents_item.action == Action.CREATE
     # The user's BrandDB section should be in the new AGENTS.md
     assert "Cite or don't state." in agents_item.new_content
@@ -107,7 +107,7 @@ def test_create_mirrors_legacy_sibling_with_no_managed_block(tmp_path):
     (root / "CLAUDE.md").write_text("# legacy\n\nLots of Sohail-specific stuff here.\n")
 
     plan = compute_plan(root)
-    agents_item = next(i for i in plan.items if i.path.name == "AGENTS.md")
+    agents_item = next(i for i in plan.items if i.path == root / "AGENTS.md")
     assert agents_item.action == Action.CREATE
     # Managed block prepended
     assert agents_item.new_content.startswith(MANAGED_BEGIN)

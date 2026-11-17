@@ -405,6 +405,8 @@ def prepare_schedule_dispatch(
         cwd=actual_cwd,
         prompt_path=prompt_path,
         output_path=output_path,
+        workspace_root=workspace_root,
+        assignee=definition.assignee,
     )
     attempt = DispatchAttempt(
         schema_version=SCHEMA_VERSION,

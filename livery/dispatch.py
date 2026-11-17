@@ -17,6 +17,7 @@ from .attempts import (
     now_iso,
     write_attempt,
 )
+from .identity import assigned_command
 from .paths_safety import assert_path_contained, sanitize_path_component
 
 
@@ -214,7 +215,7 @@ def build_runtime_command(
             "-",
         ]
         quoted = " ".join(shlex.quote(p) for p in parts)
-        return f"{quoted} < {prompt_q} > {output_q} 2>&1"
+        return assigned_command(f"{quoted} < {prompt_q} > {output_q} 2>&1", workspace_root, assignee)
 
     if runtime in {"claude_code", "claude"}:
         # Claude Code's CLI has no --cd flag, so cd before invoking.
@@ -226,7 +227,7 @@ def build_runtime_command(
         if effort:
             parts += ["--effort", effort]
         quoted = " ".join(shlex.quote(p) for p in parts)
-        return f"cd {cwd_q} && {quoted} < {prompt_q} > {output_q} 2>&1"
+        return assigned_command(f"cd {cwd_q} && {quoted} < {prompt_q} > {output_q} 2>&1", workspace_root, assignee)
 
     if runtime in {"cursor", "cursor_agent"}:
         # Cursor Agent CLI (`cursor-agent`). Reads prompt from stdin with
@@ -235,7 +236,7 @@ def build_runtime_command(
         if model:
             parts += ["--model", model]
         quoted = " ".join(shlex.quote(p) for p in parts)
-        return f"cd {cwd_q} && {quoted} < {prompt_q} > {output_q} 2>&1"
+        return assigned_command(f"cd {cwd_q} && {quoted} < {prompt_q} > {output_q} 2>&1", workspace_root, assignee)
 
     if runtime in {"lm_studio", "mlx", "ollama"}:
         # HTTP POST to an OpenAI-compatible local endpoint. LM Studio defaults
@@ -265,7 +266,7 @@ def build_runtime_command(
         if runtime == "ollama":
             parts += ["--url", "http://localhost:11434/v1"]
         quoted = " ".join(shlex.quote(p) for p in parts)
-        return f"{quoted} < {prompt_q} > {output_q} 2>&1"
+        return assigned_command(f"{quoted} < {prompt_q} > {output_q} 2>&1", workspace_root, assignee)
 
     raise NotImplementedError(
         f"Runtime '{runtime}' not supported yet. Implemented: codex, claude_code, cursor, lm_studio. "
@@ -655,6 +656,8 @@ def prepare_walkie_turn(
         cwd=str(cwd),
         prompt_path=prompt_path,
         output_path=output_path,
+        workspace_root=root,
+        assignee=peer,
     )
 
     attempt = DispatchAttempt(

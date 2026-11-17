@@ -2725,6 +2725,9 @@ def upgrade_workspace(
         False, "--force",
         help="Overwrite framework-managed files that look user-customized. Use with care.",
     ),
+    linked_repo: list[Path] = typer.Option(
+        [], "--linked-repo", help="Also refresh this linked repo (repeat for older, unregistered links).",
+    ),
 ) -> None:
     """Refresh framework-managed scaffolding without touching user content.
 
@@ -2734,12 +2737,19 @@ def upgrade_workspace(
     - Skill files for each declared CoS engine.
     - The memory/ directory scaffold, if missing.
 
-    Hard guardrails: never touches livery.toml, agents/, tickets/, or any
-    user-edited content outside the LIVERY-MANAGED markers. Existing memory
-    entries are never inspected or rewritten.
+    Adds missing default-agent configuration and a create-only CoS definition.
+    Preserves existing agents, tickets, and content outside managed markers.
     """
-    root = find_root()
-    plan = compute_plan(root)
+    resolution = resolve_workspace()
+    root = resolution.workspace_root
+    linked_repos = list(linked_repo)
+    if resolution.linked_repo_root:
+        linked_repos.append(resolution.linked_repo_root)
+    try:
+        plan = compute_plan(root, linked_repos=linked_repos)
+    except (ValueError, RuntimeError, OSError) as exc:
+        typer.echo(f"Cannot plan workspace upgrade: {exc}", err=True)
+        raise typer.Exit(1)
 
     typer.echo(f"Livery {_resolve_version()}")
     typer.echo(f"Workspace: {root}")
@@ -2755,12 +2765,12 @@ def upgrade_workspace(
         Action.WARN: "warn  ",
     }
     for item in plan.items:
-        rel = item.path.relative_to(root)
-        item_label = "force " if item.action == Action.WARN and force else label[item.action]
+        rel = _relative_path(item.path, root)
+        item_label = "force " if item.action == Action.WARN and force and item.new_content is not None else label[item.action]
         typer.echo(f"  [{item_label}] {rel}")
         if item.action != Action.SKIP:
             reason = item.reason
-            if item.action == Action.WARN and force:
+            if item.action == Action.WARN and force and item.new_content is not None:
                 reason = (
                     "exists but differs from current shipped version — "
                     "will overwrite because --force was passed"
@@ -2827,6 +2837,8 @@ def doctor(
         typer.echo("\n(not inside a workspace — skipping agent checks)")
     else:
         typer.echo(f"\nWorkspace: {root}")
+        for error in report.identity_errors:
+            typer.echo(f"  [FAIL] Session identity: {error}")
         if not report.agents:
             typer.echo("  (no agents hired yet — run `livery hire <id>` to add one)")
         for a in report.agents:

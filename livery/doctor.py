@@ -76,10 +76,11 @@ class DoctorReport:
     runtimes: list[RuntimeStatus]
     agents: list[AgentStatus]
     workspace_root: Optional[str]
+    identity_errors: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
-        return all(r.ok for r in self.runtimes) and all(a.ok for a in self.agents)
+        return not self.identity_errors and all(r.ok for r in self.runtimes) and all(a.ok for a in self.agents)
 
     def to_dict(self) -> dict:
         return {
@@ -87,6 +88,7 @@ class DoctorReport:
             "workspace_root": self.workspace_root,
             "runtimes": [asdict(r) for r in self.runtimes],
             "agents": [asdict(a) for a in self.agents],
+            "identity_errors": self.identity_errors,
         }
 
 
@@ -268,10 +270,20 @@ def run_doctor(workspace_root: Optional[Path] = None) -> DoctorReport:
     runtimes = check_all_runtimes()
     runtime_map = {r.runtime: r for r in runtimes}
     agents: list[AgentStatus] = []
+    identity_errors: list[str] = []
     if workspace_root is not None:
         agents = check_workspace_agents(workspace_root, runtime_map)
+        from .config import load
+        from .identity import load_identity
+        try:
+            default = load(workspace_root).default_agent
+            if default is not None:
+                load_identity(workspace_root, default)
+        except (ValueError, RuntimeError, OSError) as exc:
+            identity_errors.append(str(exc))
     return DoctorReport(
         runtimes=runtimes,
         agents=agents,
         workspace_root=str(workspace_root) if workspace_root else None,
+        identity_errors=identity_errors,
     )

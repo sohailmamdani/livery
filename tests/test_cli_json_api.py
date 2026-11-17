@@ -292,7 +292,7 @@ def test_agents_command_lists_hired_agents(tmp_path, monkeypatch):
     payload = json.loads(listed.stdout)
     assert payload["schema_version"] == 1
     assert payload["workspace_root"] == str(workspace)
-    assert [agent["id"] for agent in payload["agents"]] == ["research", "writer"]
+    assert [agent["id"] for agent in payload["agents"]] == ["cos", "research", "writer"]
     writer = next(agent for agent in payload["agents"] if agent["id"] == "writer")
     assert writer["name"] == "Senior Writer"
     assert writer["runtime"] == "claude_code"
@@ -337,7 +337,7 @@ def test_agents_command_from_linked_repo_lists_parent_workspace_agents(
     assert listed.exit_code == 0, listed.stdout + listed.stderr
     payload = json.loads(listed.stdout)
     assert payload["workspace_root"] == str(workspace)
-    assert [agent["id"] for agent in payload["agents"]] == ["api-dev"]
+    assert [agent["id"] for agent in payload["agents"]] == ["api-dev", "cos"]
     assert payload["agents"][0]["path"].startswith(str(workspace / "agents"))
     assert not (repo / "agents").exists()
 

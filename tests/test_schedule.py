@@ -157,6 +157,8 @@ def test_managed_run_creates_unique_attempt_and_deduplicates_occurrence(
     definition = load_schedule(_daily(workspace))
 
     def fake_runtime_command(**kwargs):
+        assert kwargs["workspace_root"] == workspace
+        assert kwargs["assignee"] == definition.assignee
         output = shlex.quote(str(kwargs["output_path"]))
         body = "=== DISPATCH_SUMMARY ===\\nStatus: done\\nSummary: complete\\n=== END DISPATCH_SUMMARY ===\\n"
         return f"printf {shlex.quote(body)} > {output}"

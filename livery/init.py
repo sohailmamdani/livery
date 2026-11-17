@@ -2,7 +2,7 @@
 
 Creates:
   - livery.toml (workspace marker + config; declares which CoS engines)
-  - agents/ (empty, with .gitkeep)
+  - agents/cos/ (editable default Chief of Staff definition and instructions)
   - tickets/ (empty, with .gitkeep)
   - For each declared CoS engine:
       - its convention file (CLAUDE.md, AGENTS.md, ...) with a
@@ -34,6 +34,7 @@ from .harness_assets import (
     render_command_slash,
 )
 from .memory import ensure_memory_scaffold
+from .identity import SESSION_INSTRUCTIONS, chief_of_staff_files, load_identity
 
 
 LIVERY_TOML_HEADER = """# Livery workspace config.
@@ -68,6 +69,7 @@ def _render_livery_toml(
     lines.append("# CoS engines this workspace targets. Used by `livery upgrade-workspace`")
     lines.append("# to know which convention files and skill directories to manage.")
     lines.append(f"cos_engines = [{quoted_engines}]")
+    lines.append('default_agent = "cos"')
     lines.append("")
     lines.append("[telegram]")
     if telegram_chat_id:
@@ -98,7 +100,7 @@ LIVERY_TALK_SKILL_NAME = "livery-talk-agent"
 LIVERY_WALKIE_SKILL_NAME = "livery-walkie-talkie"
 
 
-COS_MANAGED_BLOCK = """\
+COS_MANAGED_BLOCK = SESSION_INSTRUCTIONS + "\n" + """\
 # Livery framework conventions
 
 These conventions ship with Livery and apply to every workspace that uses
@@ -276,7 +278,9 @@ livery: managed
 Help the user start from live Livery context.
 
 Steps:
-1. Run `livery session-brief --format json`.
+1. Run `livery session-brief --format json`. Follow its `agent_instruction`,
+   including the configured identity and custom instructions. Explicit named-agent
+   assignments retain their own identity and restrictions.
 2. If the brief says this is not Livery-aware, tell the user exactly that
    and suggest `livery next`.
 3. If the brief finds a workspace or linked repo, briefly acknowledge the
@@ -371,7 +375,9 @@ Use this skill to ground the current session in live Livery state.
 
 ## Steps
 
-1. Run `livery session-brief --format json`.
+1. Run `livery session-brief --format json`. Follow its `agent_instruction`,
+   including the configured identity and custom instructions. Explicit named-agent
+   assignments retain their own identity and restrictions.
 2. If the brief says this directory is not Livery-aware:
    - Say that plainly.
    - Do not claim there is an active workspace.
@@ -724,6 +730,10 @@ def init_workspace(
             "Pass overwrite=True to force."
         )
 
+    # Preserve an existing CoS definition; reject incomplete collisions before writing.
+    if (target / "agents/cos").exists():
+        load_identity(target, "cos")
+
     result = InitResult()
 
     def _write_fresh(path: Path, content: str) -> None:
@@ -775,6 +785,11 @@ def init_workspace(
             new_content = fresh_template
         path.write_text(new_content)
         result.appended.append(path)
+
+    runtime = default_runtime or ("claude_code" if engine_ids[0] == "claude_code" else "codex")
+    for path, content in chief_of_staff_files(target, name, runtime).items():
+        if not path.exists():
+            _write_fresh(path, content)
 
     _write_fresh(target / "agents" / ".gitkeep", "")
     _write_fresh(target / "tickets" / ".gitkeep", "")

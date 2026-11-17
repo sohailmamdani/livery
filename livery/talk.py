@@ -21,6 +21,7 @@ from pathlib import Path
 import frontmatter
 
 from .dispatch import WORKER_DISCOVERY_HINT
+from .identity import assigned_command
 from .paths_safety import sanitize_path_component
 
 
@@ -391,6 +392,7 @@ def run_talk_turn(
         output_path=output_path,
     )
 
+    command = assigned_command(command, workspace_root, agent_id)
     exit_code = _run_shell_command(
         command,
         output_path=output_path,

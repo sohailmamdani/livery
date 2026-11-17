@@ -28,6 +28,16 @@ from .paths_safety import sanitize_path_component
 
 WORKSPACE_MARKER = "livery.toml"
 LINK_MARKER = ".livery-link.toml"
+
+
+def registered_linked_repos(workspace_root: Path) -> list[str]:
+    registry = workspace_root / ".livery" / "linked-repos.json"
+    known = json.loads(registry.read_text()) if registry.is_file() else []
+    if not isinstance(known, list) or not all(isinstance(p, str) and Path(p).is_absolute() for p in known):
+        raise ValueError(f"Invalid linked-repo registry: {registry}")
+    return known
+
+
 WORKSPACE_ARTIFACTS = (
     "agents",
     "tickets",
@@ -191,7 +201,14 @@ def write_link(
         lines.append(f"workspace_id = {_toml_string(workspace_id)}")
     if repo_id:
         lines.append(f"repo_id = {_toml_string(repo_id)}")
+    # Local discovery index for future workspace upgrades; never a shared path convention.
+    registry = workspace_root / ".livery" / "linked-repos.json"
+    known = registered_linked_repos(workspace_root)
     link_path.write_text("\n".join(lines) + "\n")
+    if str(repo_root) not in known:
+        known.append(str(repo_root))
+        registry.parent.mkdir(parents=True, exist_ok=True)
+        registry.write_text(json.dumps(known, indent=2) + "\n")
     return link_path
 
 

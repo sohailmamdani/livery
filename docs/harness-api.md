@@ -27,6 +27,26 @@ is useful, but normal mutations should go through Livery commands so IDs,
 frontmatter, paths, linked workspaces, dispatch attempts, and compatibility
 rules stay consistent.
 
+## Session identity
+
+At startup, consume `livery session-brief --format json`. Its additive identity
+fields are `default_agent`, `identity_source`, `assigned_agent`, `agent` (ID,
+name, role, full instructions and source path), `workspace`,
+`workspace_instructions`, and `team`. Follow `agent_instruction` before the first
+substantive response. A missing default in an older workspace keeps legacy
+behavior and suggests upgrading; an invalid definition yields `identity_error`
+and must not be replaced by an invented persona.
+
+Managed runtime launches set `LIVERY_ACTIVE_AGENT` and
+`LIVERY_ACTIVE_WORKSPACE`. For a matching workspace the brief reports
+`identity_source: assignment` and leaves `agent` null: the launch prompt owns
+the specialist's identity and task restrictions. These markers select context;
+they are not authorization or sandbox controls. Explicit named assignments
+also take precedence when the harness does not propagate these variables.
+
+Local project convention files and optional startup hooks are the integration
+points. Livery does not install instructions into cloud ChatGPT projects.
+
 Ticket Threads are the human-readable activity record. A CoS or operating
 agent should call `livery ticket update` at meaningful milestones rather than
 editing markdown directly. Livery uses the same locked append path to mirror

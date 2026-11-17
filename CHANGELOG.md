@@ -4,6 +4,14 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.23.0 — 2026-11-17
+
+### Added
+- Workspace default Chief of Staff identity: new workspaces create an editable `agents/cos/` definition and select it with `default_agent`. Session briefs include its name, role, custom instructions, workspace conventions, and team roster.
+- Managed startup instructions initialize user conversations from the default agent. Dispatch, Talk, Walkie-Talkie, scheduled runs, and advisory children preserve their explicit assigned identity.
+- Repeatable `upgrade-workspace` migration adds missing configuration and CoS files without rewriting existing agents or custom workspace instructions. Invalid explicit defaults stop migration and are reported by `doctor`.
+- Linked repositories receive a managed session-initialization block. New links are registered locally for later upgrades; `upgrade-workspace --linked-repo` and invocation from a linked repo support older links.
+
 ## 0.22.0 — 2026-08-18
 
 ### Added
