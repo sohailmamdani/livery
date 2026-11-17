@@ -27,6 +27,9 @@ default_runtime = "claude_code"            # string | unset — one of codex, cl
 default_agent = "cos"                     # existing agent ID used as Chief of Staff in user chats
 cos_engines = ["claude_code", "codex"]     # list of CoS engines this workspace targets
 
+[linked_repos]
+search_roots = ["~/projects"]             # optional extra directories for upgrade discovery
+
 [telegram]
 chat_id = "-1001234567890"                 # string — group or DM id for ticket-close pings
 token_file = "~/.claude/channels/telegram/.env"  # string — path to .env containing TELEGRAM_BOT_TOKEN
@@ -77,6 +80,26 @@ Valid entries: `claude_code`, `codex`, `pi`, `opencode`. Pass any combination as
 **Legacy workspaces without this field** (created before v0.5.0) get a one-time migration the first time `livery upgrade-workspace --apply` is run on them. The migration appends `cos_engines = ["claude_code", "codex", "pi", "opencode"]` to `livery.toml` (preserving all existing content + comments), then scaffolds files for every supported engine — the "full benefits" reading. To opt out of an engine afterward, edit the list. Subsequent upgrades respect whatever you leave there.
 
 To **add a new CoS engine to an existing modern workspace**, edit the `cos_engines` list in `livery.toml` and re-run `livery upgrade-workspace --apply`. The framework will scaffold the new engine's convention file and skill directory. To **remove** an engine, just delete it from the list — `upgrade-workspace` won't actively delete the existing files, but it'll stop managing them.
+
+#### `[linked_repos]` table
+
+`search_roots` is an optional list of additional directories to search for
+`.livery-link.toml` files during `upgrade-workspace`. Relative paths resolve
+against the workspace; `~` and environment variables are expanded locally.
+No host-specific directory is written into framework defaults.
+
+Every upgrade searches below the workspace's parent directory (the workspace
+itself when its parent is the filesystem root), checks agent working-directory
+links, and validates registered links. Discovered projects must resolve back
+to the same workspace. Applying the preview refreshes their managed startup
+instructions and registers them locally, without modifying existing project
+rules. Previewing performs no writes.
+
+Discovery does not follow directory symlinks or traverse hidden directories,
+`node_modules`, `vendor`, `__pycache__`, or other workspaces' subtrees. Use an
+explicit search root to select such a location, or `--linked-repo` for a known
+project. The CLI reports scan scope and warnings so an incomplete search is
+not presented as a complete inventory of every disk.
 
 #### `[telegram]` table
 

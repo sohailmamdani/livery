@@ -26,13 +26,15 @@ The framework-managed parts are:
 - The `memory/` directory skeleton (`decisions`, `lessons`,
   `preferences`) — added when missing and otherwise left alone.
 - The git-tracked `schedules/` directory sentinel — added when missing.
+- Startup instructions in verified linked projects, including older links
+  discovered beneath the workspace's parent or configured search roots.
 """
 
 from __future__ import annotations
 
 import tomllib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
@@ -78,6 +80,7 @@ from .memory import memory_scaffold_paths, validate_memory_scaffold
 from .identity import chief_of_staff_files, load_identity, linked_session_content
 from .paths import resolve_workspace, registered_linked_repos
 from .paths_safety import assert_path_contained
+from .linked_discovery import discover_linked_repos
 
 
 class Action(Enum):
@@ -102,6 +105,8 @@ class UpgradePlan:
     workspace_root: Path
     cos_engines: list[str]
     items: list[PlanItem]
+    link_search_roots: list[Path] = field(default_factory=list)
+    linked_repos: list[Path] = field(default_factory=list)
 
     @property
     def has_changes(self) -> bool:
@@ -430,9 +435,14 @@ def compute_plan(root: Path, linked_repos: list[Path] | None = None) -> UpgradeP
 
     registry = root / ".livery" / "linked-repos.json"
     known = registered_linked_repos(root)
+    discovery = discover_linked_repos(root)
     repos = {Path(p).resolve() for p in known}
+    repos.update(discovery.repos)
     repos.update(p.resolve() for p in (linked_repos or []))
+    for path, warning in discovery.warnings:
+        items.append(PlanItem(path, Action.WARN, warning))
     valid = set(known)
+    refreshed: list[Path] = []
     for repo in sorted(repos):
         try:
             resolution = resolve_workspace(repo)
@@ -443,6 +453,7 @@ def compute_plan(root: Path, linked_repos: list[Path] | None = None) -> UpgradeP
             items.append(PlanItem(repo, Action.WARN, f"cannot refresh linked repo: {exc}"))
             continue
         valid.add(str(repo))
+        refreshed.append(repo)
         for filename in convention_files_for(engine_ids):
             path = repo / filename
             current = path.read_text() if path.exists() else ""
@@ -453,7 +464,8 @@ def compute_plan(root: Path, linked_repos: list[Path] | None = None) -> UpgradeP
         items.append(PlanItem(registry, Action.MIGRATE, "register validated links for subsequent upgrades",
                               json.dumps(sorted(valid), indent=2) + "\n"))
 
-    return UpgradePlan(workspace_root=root, cos_engines=engine_ids, items=items)
+    return UpgradePlan(workspace_root=root, cos_engines=engine_ids, items=items,
+                       link_search_roots=discovery.roots, linked_repos=refreshed)
 
 
 def _user_content_score(path: Path) -> tuple[int, float]:

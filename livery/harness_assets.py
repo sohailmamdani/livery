@@ -630,6 +630,7 @@ COMMAND_HARNESS_ASSETS: tuple[CommandHarnessAsset, ...] = (
         argument_hint="[--apply] [--force]",
         steps=(
             "Run `livery upgrade-workspace` first as a dry run.",
+            "Review linked-project discovery scope and warnings. The upgrade discovers older links beneath the workspace's parent and configured [linked_repos].search_roots; --linked-repo can name another project explicitly.",
             "Explain created, refreshed, warned, and skipped items.",
             "Run `livery upgrade-workspace --apply` when the user wants safe updates written.",
             "Use `--force` only when the user explicitly wants customized shipped skill or command files overwritten.",

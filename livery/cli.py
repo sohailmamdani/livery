@@ -2754,6 +2754,10 @@ def upgrade_workspace(
     typer.echo(f"Livery {_resolve_version()}")
     typer.echo(f"Workspace: {root}")
     typer.echo(f"CoS engines: {', '.join(plan.cos_engines)}")
+    if plan.link_search_roots:
+        typer.echo("Linked-project search roots: " + ", ".join(str(p) for p in plan.link_search_roots))
+        typer.echo(f"Verified linked projects: {len(plan.linked_repos)} (including registered links and agent working directories)")
+        typer.echo("For projects elsewhere, configure [linked_repos].search_roots or use --linked-repo.")
     typer.echo()
 
     label = {
@@ -2788,10 +2792,17 @@ def upgrade_workspace(
 
     written = apply_plan(plan, force=force)
     typer.echo(f"\nApplied {len(written)} change(s).")
-    skipped_warns = [i for i in plan.items if i.action == Action.WARN]
+    skipped_warns = [i for i in plan.items if i.action == Action.WARN and i.new_content is not None]
     if skipped_warns and not force:
         typer.echo(
             f"Skipped {len(skipped_warns)} customized file(s) — pass --force to overwrite.",
+            err=True,
+        )
+    discovery_warns = [i for i in plan.items if i.action == Action.WARN and i.new_content is None]
+    if discovery_warns:
+        typer.echo(
+            f"{len(discovery_warns)} link discovery/refresh warning(s) remain; "
+            "review the paths above. --force cannot repair missing or invalid links.",
             err=True,
         )
 

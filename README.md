@@ -74,10 +74,10 @@ livery upgrade-workspace --apply  # write the proposed updates
 ### Pinning to a specific version (advanced)
 
 ```sh
-uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.23.0' livery
+uv tool install --force --from 'git+https://github.com/sohailmamdani/livery.git@v0.24.0' livery
 ```
 
-**Important caveat:** pinning with `@v0.23.0` (or any git ref) makes `uv tool upgrade livery` a no-op forever — uv re-resolves the same pinned ref each time and concludes nothing has changed. To move a pinned install to a newer version, you have to reinstall with the new tag (or drop the pin entirely):
+**Important caveat:** pinning with `@v0.24.0` (or any git ref) makes `uv tool upgrade livery` a no-op forever — uv re-resolves the same pinned ref each time and concludes nothing has changed. To move a pinned install to a newer version, you have to reinstall with the new tag (or drop the pin entirely):
 
 ```sh
 # move the pin forward when a newer tag exists
@@ -496,18 +496,33 @@ Explicit worker assignments retain their own identity, including Talk,
 Walkie-Talkie, schedules, and advisory children. Selecting an identity does not
 change the chat's running model or grant access to previous conversations.
 
-Upgrades also refresh startup instructions in registered linked repositories,
-preserving project rules. Older links are not automatically discoverable: run
-the upgrade from each linked repo, or name them explicitly:
+Upgrades discover older linked projects automatically beneath the workspace's
+parent directory and from agents' working directories, as well as reading the
+local registry. Each project's own link must resolve back to this workspace
+before it is included. The preview lists the search roots and affected files;
+`--apply` refreshes startup instructions while preserving project rules and
+registers discovered links for subsequent upgrades.
+
+For projects in other locations, add search roots to `livery.toml`:
+
+```toml
+[linked_repos]
+search_roots = ["~/projects", "/Volumes/Work/projects"]
+```
+
+Or name individual linked projects explicitly:
 
 ```sh
 livery upgrade-workspace --linked-repo ~/code/project-one --linked-repo ~/code/project-two
 livery upgrade-workspace --linked-repo ~/code/project-one --linked-repo ~/code/project-two --apply
 ```
 
-New links are recorded in the workspace's local `.livery/linked-repos.json`
-index. Missing or reassigned links are skipped. Preview the complete plan before
-applying; invalid default-agent definitions stop the upgrade without writes.
+The scan skips hidden directories, dependency trees, directory symlinks, and
+other workspaces' subtrees. Explicit search roots can select locations outside
+that default scope. Missing roots, unreadable directories, and invalid markers
+produce visible warnings; missing or reassigned registered links are skipped.
+Preview the complete plan before applying; invalid default-agent definitions
+stop the upgrade without writes.
 
 This initializes harness sessions that load project convention files or Livery
 startup hooks, including host-backed sessions accessed from mobile. It does not

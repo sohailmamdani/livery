@@ -4,6 +4,15 @@ All notable changes to Livery. Format loosely follows [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.24.0 — 2026-11-17
+
+### Fixed
+- Workspace upgrades now discover and refresh older linked projects even when they predate the local registry. This prevents parent-only upgrades from leaving linked projects without Chief of Staff startup instructions.
+
+### Added
+- Read-only discovery beneath the workspace's parent directory, inspection of agent working-directory links, and optional `[linked_repos].search_roots` for additional locations. Discovered links are ownership-checked and registered on apply.
+- Upgrade previews report search scope and verified-project counts. Missing roots, unreadable directories, and invalid links remain visible warnings; discovery skips directory symlinks, dependency trees, and unrelated workspace subtrees.
+
 ## 0.23.0 — 2026-11-17
 
 ### Added
